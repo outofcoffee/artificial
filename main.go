@@ -63,6 +63,8 @@ Flags:
   -p, --provider       provider name (see `+"`oc-config list`"+`)
   -f, --model-family   model family to add or remove
   -m, --model          model id to set as default / to add or remove
+  -c, --providers      path to a providers.yaml override
+                       (or set OC_CONFIG_PROVIDERS)
 
 add: deep-merges the provider into the opencode config, preserving everything
      else. Specify a family and/or an explicit model.
@@ -71,11 +73,12 @@ remove: removes the provider, or just the named models when a family/model is
 `)
 }
 
-// selection holds the common -p/-f/-m flags shared by add and remove.
+// selection holds the common flags shared by add and remove.
 type selection struct {
-	provider string
-	family   string
-	model    string
+	provider  string
+	family    string
+	model     string
+	providers string
 }
 
 func parseSelection(name string, args []string) (selection, error) {
@@ -87,6 +90,8 @@ func parseSelection(name string, args []string) (selection, error) {
 	fs.StringVar(&s.family, "f", "", "model family (shorthand)")
 	fs.StringVar(&s.model, "model", "", "model id")
 	fs.StringVar(&s.model, "m", "", "model id (shorthand)")
+	fs.StringVar(&s.providers, "providers", "", "path to a providers.yaml override")
+	fs.StringVar(&s.providers, "c", "", "providers.yaml override (shorthand)")
 	if err := fs.Parse(args); err != nil {
 		return s, err
 	}
@@ -105,7 +110,7 @@ func cmdAdd(args []string) error {
 		return fmt.Errorf("specify --model-family/-f and/or --model/-m")
 	}
 
-	cat, err := loadCatalog()
+	cat, err := loadCatalogFrom(resolveCatalogPath(sel.providers))
 	if err != nil {
 		return err
 	}
@@ -154,7 +159,7 @@ func cmdRemove(args []string) error {
 		return err
 	}
 
-	cat, err := loadCatalog()
+	cat, err := loadCatalogFrom(resolveCatalogPath(sel.providers))
 	if err != nil {
 		return err
 	}
@@ -200,7 +205,15 @@ func cmdRemove(args []string) error {
 }
 
 func cmdList(args []string) error {
-	cat, err := loadCatalog()
+	fs := flag.NewFlagSet("list", flag.ContinueOnError)
+	var providers string
+	fs.StringVar(&providers, "providers", "", "path to a providers.yaml override")
+	fs.StringVar(&providers, "c", "", "providers.yaml override (shorthand)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	cat, err := loadCatalogFrom(resolveCatalogPath(providers))
 	if err != nil {
 		return err
 	}

@@ -171,6 +171,41 @@ func TestCmdRemove_FamilyAndNoOp(t *testing.T) {
 	}
 }
 
+func TestCmdList_ProvidersOverride(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "custom.yaml")
+	os.WriteFile(path, []byte(`providers:
+  mine:
+    description: My custom provider
+    families:
+      base:
+        defaultModel: m1
+        models:
+          m1: {name: Model One}
+`), 0o600)
+
+	// Via the --providers flag.
+	out := captureStdout(t, func() {
+		if err := cmdList([]string{"--providers", path}); err != nil {
+			t.Fatalf("cmdList: %v", err)
+		}
+	})
+	if !strings.Contains(out, "mine") || strings.Contains(out, "openrouter") {
+		t.Errorf("flag override not honoured:\n%s", out)
+	}
+
+	// Via the env var.
+	t.Setenv(providersEnv, path)
+	out = captureStdout(t, func() {
+		if err := cmdList(nil); err != nil {
+			t.Fatalf("cmdList: %v", err)
+		}
+	})
+	if !strings.Contains(out, "mine") {
+		t.Errorf("env override not honoured:\n%s", out)
+	}
+}
+
 func TestCmdList(t *testing.T) {
 	out := captureStdout(t, func() {
 		if err := cmdList(nil); err != nil {

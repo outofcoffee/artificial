@@ -3,11 +3,16 @@ package main
 import (
 	_ "embed"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 )
+
+// providersEnv names the environment variable that points at a providers.yaml
+// override.
+const providersEnv = "OC_CONFIG_PROVIDERS"
 
 // providersYAML is the externalised provider/model-family catalogue, embedded
 // into the binary at build time but maintained as a plain file.
@@ -40,10 +45,33 @@ type Family struct {
 	Models       map[string]map[string]any `yaml:"models"`
 }
 
+// resolveCatalogPath determines which catalogue file to use: the flag value if
+// given, otherwise the OC_CONFIG_PROVIDERS env var, otherwise "" (embedded).
+func resolveCatalogPath(flagPath string) string {
+	if flagPath != "" {
+		return flagPath
+	}
+	return os.Getenv(providersEnv)
+}
+
 // loadCatalog parses the embedded catalogue.
 func loadCatalog() (*Catalog, error) {
+	return loadCatalogFrom("")
+}
+
+// loadCatalogFrom parses the catalogue from path, falling back to the embedded
+// catalogue when path is empty.
+func loadCatalogFrom(path string) (*Catalog, error) {
+	data := providersYAML
+	if path != "" {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("reading provider catalogue %s: %w", path, err)
+		}
+		data = b
+	}
 	var c Catalog
-	if err := yaml.Unmarshal(providersYAML, &c); err != nil {
+	if err := yaml.Unmarshal(data, &c); err != nil {
 		return nil, fmt.Errorf("parsing provider catalogue: %w", err)
 	}
 	return &c, nil

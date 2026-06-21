@@ -100,4 +100,12 @@ Everything `oc-config` knows lives in `providers.yaml`. Add a provider, a model
 family, or a new model there and rebuild — no Go required. The file is commented
 with the schema.
 
+Don't want to rebuild? Point `oc-config` at your own catalogue at runtime — the
+flag wins, then the env var, then the built-in default:
+
+```sh
+oc-config list --providers ./my-providers.yaml   # or: -c
+OC_CONFIG_PROVIDERS=./my-providers.yaml oc-config list
+```
+
 The `.env` file and the built binary are git-ignored.

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -57,6 +59,57 @@ func TestCatalogIntegrity(t *testing.T) {
 				t.Errorf("provider %q family %q: defaultModel %q is not one of its models", name, fname, fam.DefaultModel)
 			}
 		}
+	}
+}
+
+func TestResolveCatalogPath(t *testing.T) {
+	t.Setenv(providersEnv, "/from/env.yaml")
+	if got := resolveCatalogPath("/from/flag.yaml"); got != "/from/flag.yaml" {
+		t.Errorf("flag should win, got %q", got)
+	}
+	if got := resolveCatalogPath(""); got != "/from/env.yaml" {
+		t.Errorf("env should be used when flag empty, got %q", got)
+	}
+	t.Setenv(providersEnv, "")
+	if got := resolveCatalogPath(""); got != "" {
+		t.Errorf("expected empty (embedded), got %q", got)
+	}
+}
+
+func TestLoadCatalogFrom(t *testing.T) {
+	// Embedded fallback.
+	if _, err := loadCatalogFrom(""); err != nil {
+		t.Fatalf("embedded catalogue: %v", err)
+	}
+
+	// Override file.
+	dir := t.TempDir()
+	path := filepath.Join(dir, "custom.yaml")
+	os.WriteFile(path, []byte(`providers:
+  mine:
+    description: My custom provider
+    families:
+      base:
+        defaultModel: m1
+        models:
+          m1:
+            name: Model One
+`), 0o600)
+
+	cat, err := loadCatalogFrom(path)
+	if err != nil {
+		t.Fatalf("loadCatalogFrom: %v", err)
+	}
+	if _, ok := cat.Providers["mine"]; !ok {
+		t.Error("custom provider not loaded from override file")
+	}
+	if _, ok := cat.Providers["openrouter"]; ok {
+		t.Error("override should replace, not merge with, the embedded catalogue")
+	}
+
+	// Missing file is an error.
+	if _, err := loadCatalogFrom(filepath.Join(dir, "nope.yaml")); err == nil {
+		t.Error("expected error for missing override file")
 	}
 }
 
