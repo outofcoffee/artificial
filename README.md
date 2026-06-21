@@ -88,6 +88,12 @@ Bedrock authenticates through your AWS credentials.
 Base URLs default to the usual local ports and can be overridden via env
 (`OLLAMA_BASE_URL`, `LLAMACPP_BASE_URL`, `OPENAI_BASE_URL`).
 
+## Guides
+
+Provider- and model-specific walkthroughs live in [`docs/`](docs/):
+
+- [Qwen3.6-35B-A3B on llama.cpp](docs/llamacpp/qwen3.6.md)
+
 ## Adding providers and models
 
 Everything `oc-config` knows lives in `providers.yaml`. Add a provider, a model
