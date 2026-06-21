@@ -6,3 +6,7 @@
 
 # GoReleaser output
 /dist/
+
+# Coverage artefacts
+coverage.out
+coverage.html
