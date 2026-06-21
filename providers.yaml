@@ -1,0 +1,104 @@
+# Provider and model-family catalogue for oc-config.
+#
+# This file is embedded into the binary at build time (see //go:embed in
+# catalog.go) but kept external so providers, model families, and endpoints can
+# be maintained without touching the Go code.
+#
+# Per provider:
+#   name            display name written into the opencode config (optional)
+#   npm             SDK package for custom providers (e.g. openai-compatible)
+#   description     shown by `oc-config list`
+#   apiKeyEnv       env var (looked up in .env, then the environment) whose
+#                   value is injected as options.apiKey
+#   apiKeyRequired  fail if apiKeyEnv resolves to nothing
+#   apiKeyPrefix    sanity-check that the key starts with this
+#   options         static options merged into the provider block
+#   optionsFromEnv  option -> env var; injected into options when the var is set
+#   families        named model sets; each has a defaultModel and a models map
+
+providers:
+  openrouter:
+    description: OpenRouter model aggregator
+    apiKeyEnv: DEEPSEEK_API_KEY
+    apiKeyRequired: true
+    apiKeyPrefix: sk-or-
+    families:
+      deepseek-v4:
+        description: DeepSeek V4 (Flash and Pro)
+        defaultModel: deepseek/deepseek-v4-flash
+        models:
+          deepseek/deepseek-v4-flash:
+            name: DeepSeek V4 Flash
+          deepseek/deepseek-v4-pro:
+            name: DeepSeek V4 Pro
+
+  amazon-bedrock:
+    description: AWS Bedrock (authenticates via your AWS credentials)
+    # No apiKey is injected: the AWS SDK reads AWS_PROFILE / AWS_ACCESS_KEY_ID /
+    # etc. Override the region with AWS_REGION or by editing options.region.
+    options:
+      region: us-east-1
+    optionsFromEnv:
+      region: AWS_REGION
+    families:
+      claude:
+        description: Anthropic Claude models on Bedrock
+        defaultModel: anthropic.claude-3-5-sonnet-20241022-v2:0
+        models:
+          "anthropic.claude-3-5-sonnet-20241022-v2:0":
+            name: Claude 3.5 Sonnet
+          "anthropic.claude-3-5-haiku-20241022-v1:0":
+            name: Claude 3.5 Haiku
+
+  ollama:
+    description: Local Ollama server (OpenAI-compatible API)
+    name: Ollama (local)
+    npm: "@ai-sdk/openai-compatible"
+    options:
+      baseURL: http://localhost:11434/v1
+    optionsFromEnv:
+      baseURL: OLLAMA_BASE_URL
+    families:
+      llama:
+        description: Meta Llama models served by Ollama
+        defaultModel: llama3.2
+        models:
+          llama3.2:
+            name: Llama 3.2
+          llama3.1:
+            name: Llama 3.1
+
+  llamacpp:
+    description: Local llama.cpp server (OpenAI-compatible API)
+    name: llama.cpp (local)
+    npm: "@ai-sdk/openai-compatible"
+    options:
+      baseURL: http://localhost:8080/v1
+    optionsFromEnv:
+      baseURL: LLAMACPP_BASE_URL
+    families:
+      local:
+        description: Model loaded by your llama.cpp server
+        defaultModel: local-model
+        models:
+          local-model:
+            name: llama.cpp model
+
+  openai-compatible:
+    description: Generic OpenAI-compatible endpoint (set base URL and key via env)
+    name: OpenAI-compatible
+    npm: "@ai-sdk/openai-compatible"
+    apiKeyEnv: OPENAI_API_KEY
+    options:
+      baseURL: https://api.openai.com/v1
+    optionsFromEnv:
+      baseURL: OPENAI_BASE_URL
+    families:
+      gpt:
+        description: OpenAI GPT models (or your endpoint's equivalents)
+        defaultModel: gpt-4o
+        models:
+          gpt-4o:
+            name: GPT-4o
+          gpt-4o-mini:
+            name: GPT-4o mini

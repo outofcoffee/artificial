@@ -1,63 +1,97 @@
-# configure-opencode
+# oc-config
 
-A small Go tool that configures the current user's [opencode](https://opencode.ai)
-installation to use [OpenRouter](https://openrouter.ai) with DeepSeek V4 models.
+Point [opencode](https://opencode.ai) at the model providers you actually use —
+OpenRouter, AWS Bedrock, Ollama, llama.cpp, or any OpenAI-compatible endpoint —
+with a single command. No hand-editing JSON, no clobbering the config you
+already have.
 
 ## What it does
 
-- Reads your OpenRouter API key from a local `.env` file at run time.
-- Updates the user's **global** opencode config under
-  `${XDG_CONFIG_HOME:-$HOME/.config}/opencode` (updating an existing
-  `opencode.json`/`opencode.jsonc` in place, or creating `opencode.json`).
-- **Deep-merges** an `openrouter` provider — DeepSeek V4 Flash and DeepSeek V4
-  Pro — into the config and sets the default model, without disturbing the rest
-  of your configuration:
-  - Existing providers and settings are preserved.
-  - The config is parsed as **JSONC**, so comments and trailing commas are
-    handled, and comments outside the managed `openrouter` block are kept.
-  - The API key is injected directly into the config so opencode works from any
-    directory (it only auto-loads `.env` from the current project).
-- Writes the config with `0600` permissions, since it now contains your key.
+- Merges provider settings into your **global** opencode config
+  (`~/.config/opencode`), keeping everything else — other providers, your theme,
+  even your comments — exactly where you left it.
+- Reads provider definitions from a catalogue (`providers.yaml`) baked into the
+  binary, so there are no URLs or model ids to memorise.
+- Pulls API keys from a local `.env` (or your environment) and writes the config
+  `0600`, because secrets.
 
-Re-running the tool is safe and idempotent.
+## Install
 
-## Models
+```sh
+go build -o oc-config .
+```
 
-| Model | ID | |
-| --- | --- | --- |
-| DeepSeek V4 Flash | `openrouter/deepseek/deepseek-v4-flash` | default |
-| DeepSeek V4 Pro | `openrouter/deepseek/deepseek-v4-pro` | |
+Drop the resulting `oc-config` binary anywhere on your `PATH`.
 
-## Prerequisites
+## Quickstart
 
-- Go 1.24 or later
-- An OpenRouter API key (starts with `sk-or-`)
+See what's on the menu:
+
+```sh
+oc-config list
+```
+
+Add a provider and a model family:
+
+```sh
+# OpenRouter needs a key — put it in .env first:
+echo 'DEEPSEEK_API_KEY=sk-or-v1-...' > .env
+
+oc-config add --provider openrouter --model-family deepseek-v4
+```
+
+Then just run `opencode`.
 
 ## Usage
 
-1. Create a `.env` file in this directory with your OpenRouter key:
+```sh
+oc-config list
+oc-config add    --provider <name> [--model-family <family>] [--model <id>]
+oc-config remove --provider <name> [--model-family <family>] [--model <id>]
+```
 
-   ```sh
-   echo 'DEEPSEEK_API_KEY=sk-or-v1-...' > .env
-   ```
+Short flags: `-p` (provider), `-f` (model-family), `-m` (model).
 
-2. Run the tool:
+### Examples
 
-   ```sh
-   go run .
-   ```
+```sh
+# A local Ollama model (no key required)
+oc-config add -p ollama -f llama
 
-   Or build a binary and run it:
+# Claude on AWS Bedrock (uses your AWS credentials)
+oc-config add -p amazon-bedrock -f claude
 
-   ```sh
-   go build -o configure-opencode .
-   ./configure-opencode
-   ```
+# Any OpenAI-compatible endpoint, set via env
+OPENAI_API_KEY=sk-... OPENAI_BASE_URL=https://my-endpoint/v1 \
+  oc-config add -p openai-compatible -m my-model
 
-3. Start opencode from any directory:
+# Pin a specific default model
+oc-config add -p openrouter -f deepseek-v4 -m deepseek/deepseek-v4-pro
 
-   ```sh
-   opencode
-   ```
+# Take a provider back out
+oc-config remove -p ollama
 
-The `.env` file (and any built binary) are git-ignored.
+# Or just drop one family's models
+oc-config remove -p openrouter -f deepseek-v4
+```
+
+`add` sets the chosen model as opencode's default. `remove` clears the default
+if it pointed at something you removed.
+
+## Keys and endpoints
+
+Each provider declares which environment variable holds its key (`oc-config
+list` shows them). Values are looked up in `.env` next to the tool first, then
+your shell environment. Local providers like Ollama and llama.cpp need no key;
+Bedrock authenticates through your AWS credentials.
+
+Base URLs default to the usual local ports and can be overridden via env
+(`OLLAMA_BASE_URL`, `LLAMACPP_BASE_URL`, `OPENAI_BASE_URL`).
+
+## Adding providers and models
+
+Everything `oc-config` knows lives in `providers.yaml`. Add a provider, a model
+family, or a new model there and rebuild — no Go required. The file is commented
+with the schema.
+
+The `.env` file and the built binary are git-ignored.

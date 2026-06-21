@@ -4,36 +4,43 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A single-command Go tool (`configure-opencode`) that configures the current user's global [opencode](https://opencode.ai) installation to use OpenRouter with DeepSeek V4 models. All logic lives in `main.go`.
+`oc-config` is a Go CLI that configures the current user's global [opencode](https://opencode.ai) installation to use a model provider, by deep-merging provider settings into the opencode config under `${XDG_CONFIG_HOME:-$HOME/.config}/opencode`.
 
 ## Commands
 
 ```sh
-go run .                          # configure opencode (requires .env, see below)
-go build -o configure-opencode .  # build a binary
-go vet ./...                      # vet
+go test ./...                  # run the suite
+go test ./... -cover           # with coverage (keep total >= 80%)
+go vet ./...                   # vet
+go build -o oc-config .        # build the CLI binary
+gofmt -w *.go                  # format
 ```
 
-There is no test suite. To exercise the tool safely without touching your real config, point `XDG_CONFIG_HOME` at a temp dir and provide a throwaway `.env`:
+Run a single test: `go test -run TestWriteConfig_Idempotent ./...`
 
-```sh
-tmp="$(mktemp -d)"; mkdir -p "$tmp/opencode"
-echo 'DEEPSEEK_API_KEY=sk-or-v1-test' > .env
-XDG_CONFIG_HOME="$tmp" go run .
-```
+## Layout
 
-## How it works (the important part)
+- `main.go` — CLI: command dispatch (`add`/`remove`/`list`), flag parsing (`parseSelection` registers both long and short flags against the same vars), and user-facing output.
+- `catalog.go` — the embedded provider catalogue (`//go:embed providers.yaml`), its types, and `buildProviderBlock`, which turns a provider+family+model selection into an opencode provider block.
+- `config.go` — opencode config IO: JSONC read/merge/write, env/key resolution, JSON-Pointer helpers.
+- `providers.yaml` — externalised provider/model-family data (URLs, model ids, key env vars). **Add providers/models here, not in Go.** Embedded at build time but kept external for maintenance.
+- `*_test.go` — `catalog_test.go` (catalogue integrity + `buildProviderBlock`), `config_test.go` (merge/remove/IO), `main_test.go` (CLI layer).
 
-The tool does an **in-place merge**, not an overwrite. Understanding this is essential before changing `writeConfig`:
+## Architecture notes (the important part)
 
-- It targets `${XDG_CONFIG_HOME:-$HOME/.config}/opencode`, preferring an existing `opencode.json` then `opencode.jsonc`, falling back to creating `opencode.json`.
-- The existing config is parsed as **JSONC** via `github.com/tailscale/hujson` (tolerates comments and trailing commas).
-- Merging is done with an **RFC 6902 JSON Patch** applied to the hujson AST. This is deliberate: it preserves comments and formatting *outside* the managed `openrouter` block. Parent objects (`/provider`) are only created with an `add` op when absent, so sibling providers are never clobbered.
-- The `openrouter` block itself is deep-merged (`deepMerge`) over any existing one so user extras survive, then replaces `/provider/openrouter` wholesale (internal comments of that block are not preserved — it is script-managed).
-- The OpenRouter API key is read from `.env` at run time and injected directly into the config (opencode only auto-loads `.env` from the current project, so a global config must embed the key). The file is written `0600`.
+**In-place JSONC merge, never overwrite.** This is the core invariant. Understand it before touching `config.go`:
 
-Invariants to keep when editing: the merge must stay idempotent, must never drop unrelated config or comments, and the written file must remain `0600`.
+- Targets the existing `opencode.json` or `opencode.jsonc` (preferring whichever exists), falling back to creating `opencode.json`.
+- Parses the config as **JSONC** via `github.com/tailscale/hujson` (tolerates comments and trailing commas).
+- Edits are applied as an **RFC 6902 JSON Patch** on the hujson AST, which preserves comments and formatting *outside* the managed provider block. Parent objects (`/provider`) are only created with an `add` op when absent, so sibling providers are never clobbered. Path segments are escaped with `jsonPointerEscape` (model ids contain `/`).
+- The `openrouter`-style block is deep-merged (`deepMerge`) over any existing one so user extras survive.
+- `remove` guards every `remove` op with `Find` (RFC 6902 errors on missing paths) and clears the top-level default `model` when it pointed at something removed.
+- Output is written `0600` (and `chmod`ed, since `WriteFile` won't change perms on an existing file) because it may hold an API key.
 
-## Key location resolution
+**Key/option resolution.** `buildProviderBlock` injects `options.apiKey` from the provider's `apiKeyEnv` (resolved from `.env` next to the tool, then the environment), validating `apiKeyPrefix` and erroring when `apiKeyRequired`. `optionsFromEnv` injects other options (e.g. `baseURL`, `region`) when their env vars are set. The opencode top-level `model` is `<providerId>/<modelKey>`.
 
-`.env` is resolved relative to `main.go`'s source directory via `runtime.Caller`, mirroring "the `.env` next to the tool". The key must start with `sk-or-`.
+Invariants to keep: merges stay idempotent, never drop unrelated config or comments, output stays `0600`, and every family's `defaultModel` must be one of its `models` (enforced by `TestCatalogIntegrity`).
+
+## Reference
+
+The opencode config schema is documented at https://opencode.ai/docs/config/. The catalogue follows it: `amazon-bedrock` is the Bedrock provider id, custom providers (`ollama`, `llamacpp`, `openai-compatible`) carry an `npm` package plus `options.baseURL`. Note opencode also supports `{env:VAR}` substitution in the config, but this tool deliberately embeds the resolved key instead (a global config can't rely on a project-local `.env`).
