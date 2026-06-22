@@ -46,4 +46,7 @@ jobs:
       - name: Run GoReleaser
         run: curl -sfL https://goreleaser.com/static/run | bash -s -- release --clean
         env:
+          # Creates the release in this repo.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Pushes the Homebrew formula to outofcoffee/homebrew-tap.
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}

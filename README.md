@@ -93,6 +93,7 @@ Base URLs default to the usual local ports and can be overridden via env
 Provider- and model-specific walkthroughs live in [`docs/`](docs/):
 
 - [Qwen3.6-35B-A3B on llama.cpp](docs/llamacpp/qwen3.6.md)
+- [Gemma-4-12B-IT on llama.cpp](docs/llamacpp/gemma4.md)
 
 ## Adding providers and models
 

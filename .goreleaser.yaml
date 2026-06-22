@@ -26,6 +26,27 @@ archives:
       - goos: windows
         formats: [zip]
 
+brews:
+  - name: oc-config
+    # Publish the formula to the dedicated tap repository.
+    repository:
+      owner: outofcoffee
+      name: homebrew-tap
+      branch: main
+      # Uses a PAT with write access to the tap repo (the default GITHUB_TOKEN
+      # only has access to this repository, not the tap).
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: "https://github.com/outofcoffee/configure-opencode"
+    description: "Configure opencode provider catalogues"
+    license: "MIT"
+    # Skip publishing the formula for pre-release tags.
+    skip_upload: auto
+    commit_author:
+      name: goreleaser-bot
+      email: bot@goreleaser.com
+    test: |
+      system "#{bin}/oc-config", "--help"
+
 checksum:
   name_template: checksums.txt
 
