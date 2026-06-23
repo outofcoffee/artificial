@@ -156,3 +156,133 @@ func TestCmdExport_RoundTripsWithApply(t *testing.T) {
 		t.Errorf("exported Outfit does not parse: %v", err)
 	}
 }
+
+func TestCmdExport_NoProviders(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := cmdExport(nil); err == nil {
+		t.Error("expected error when nothing is configured")
+	}
+}
+
+// TestCmdExport_ModelOnlyFallsBackToModel covers a provider whose configured
+// models match no known family (a bare llama.cpp label): export should still
+// produce a valid Outfit naming the MODEL.
+func TestCmdExport_ModelOnlyFallsBackToModel(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+
+	outfit := filepath.Join(dir, "Outfit")
+	mustWrite(t, outfit, "PROVIDER llamacpp\nMODEL my-local-model\n")
+	captureStdout(t, func() {
+		if err := cmdApply([]string{outfit}); err != nil {
+			t.Fatalf("cmdApply: %v", err)
+		}
+	})
+
+	out := captureStdout(t, func() {
+		if err := cmdExport(nil); err != nil {
+			t.Fatalf("cmdExport: %v", err)
+		}
+	})
+	if !strings.Contains(out, "PROVIDER llamacpp") || !strings.Contains(out, "MODEL    my-local-model") {
+		t.Errorf("unexpected export:\n%s", out)
+	}
+	if strings.Contains(out, "FAMILY") {
+		t.Errorf("did not expect a FAMILY line for an unrecognised model:\n%s", out)
+	}
+}
+
+// TestCmdExport_FamilyPlusNonDefaultModel checks that when the default model is
+// not the family's own default, export keeps both the FAMILY and the MODEL.
+func TestCmdExport_FamilyPlusNonDefaultModel(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("DEEPSEEK_API_KEY", "sk-or-v1-test")
+
+	cat, _ := loadCatalog()
+	fam := cat.Providers["openrouter"].Families["deepseek-v4"]
+	// Find a model in the family that is not its default.
+	var nonDefault string
+	for _, k := range fam.modelKeys() {
+		if k != fam.DefaultModel {
+			nonDefault = k
+			break
+		}
+	}
+	if nonDefault == "" {
+		t.Skip("family has no non-default model to exercise this path")
+	}
+
+	outfit := filepath.Join(dir, "Outfit")
+	mustWrite(t, outfit, "PROVIDER openrouter\nFAMILY deepseek-v4\nMODEL "+nonDefault+"\n")
+	captureStdout(t, func() {
+		if err := cmdApply([]string{outfit}); err != nil {
+			t.Fatalf("cmdApply: %v", err)
+		}
+	})
+
+	out := captureStdout(t, func() {
+		if err := cmdExport(nil); err != nil {
+			t.Fatalf("cmdExport: %v", err)
+		}
+	})
+	if !strings.Contains(out, "FAMILY   deepseek-v4") || !strings.Contains(out, "MODEL    "+nonDefault) {
+		t.Errorf("expected both FAMILY and the non-default MODEL:\n%s", out)
+	}
+}
+
+// TestCmdExport_MultipleProviders covers provider selection when several are
+// configured: without a hint it errors, with -p it exports the chosen one, and
+// an unknown -p errors.
+func TestCmdExport_MultipleProviders(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+
+	// Seed two providers with no default model, so neither is implied.
+	path, _ := resolveConfigFile()
+	cat, _ := loadCatalog()
+	for _, id := range []string{"ollama", "llamacpp"} {
+		block, _, err := buildProviderBlock(id, cat.Providers[id], "", "label-"+id, "", noEnv)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := writeConfig(path, id, block, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := cmdExport(nil); err == nil {
+		t.Error("expected error when several providers are configured and none is implied")
+	}
+
+	out := captureStdout(t, func() {
+		if err := cmdExport([]string{"-p", "ollama"}); err != nil {
+			t.Fatalf("cmdExport -p ollama: %v", err)
+		}
+	})
+	if !strings.Contains(out, "PROVIDER ollama") {
+		t.Errorf("export -p ollama gave:\n%s", out)
+	}
+
+	if err := cmdExport([]string{"-p", "nonesuch"}); err == nil {
+		t.Error("expected error for a provider that is not configured")
+	}
+}
+
+func TestCmdApply_BadOutfitContent(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+
+	bad := filepath.Join(dir, "Outfit")
+	mustWrite(t, bad, "FAMILY llama\n") // no PROVIDER
+	if err := cmdApply([]string{bad}); err == nil {
+		t.Error("expected error for an Outfit without a PROVIDER")
+	}
+}
+
+func TestCmdApply_MissingExplicitPath(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := cmdApply([]string{filepath.Join(t.TempDir(), "nope.outfit")}); err == nil {
+		t.Error("expected error for a missing explicit path")
+	}
+}
