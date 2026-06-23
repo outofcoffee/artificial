@@ -15,6 +15,8 @@ import (
 //	PROVIDER openrouter
 //	FAMILY   deepseek-v4
 //	MODEL    deepseek/deepseek-v4-pro   # optional; sets the default
+//	CONTEXT  128k                       # optional; context window
+//	BASEURL  https://gateway/v1         # optional; API base URL override
 //
 // Keywords are matched case-insensitively, but UPPERCASE is canonical (it is
 // what `oc-config export` emits). Blank lines, full-line `#` comments, and
@@ -25,7 +27,23 @@ const (
 	kwProvider = "provider"
 	kwFamily   = "family"
 	kwModel    = "model"
+	kwContext  = "context"
+	kwBaseURL  = "baseurl"
 )
+
+// canonicalKeyword resolves an Outfit keyword (already lower-cased) to its
+// canonical form, accepting a few friendly aliases for the base URL. It returns
+// "" for an unrecognised keyword.
+func canonicalKeyword(kw string) string {
+	switch kw {
+	case kwProvider, kwFamily, kwModel, kwContext:
+		return kw
+	case kwBaseURL, "base-url", "base_url", "url":
+		return kwBaseURL
+	default:
+		return ""
+	}
+}
 
 // DefaultOutfitFile is the filename `oc-config apply` looks for when no path is
 // given.
@@ -45,30 +63,35 @@ func parseOutfit(data []byte) (selection, error) {
 		}
 
 		fields := strings.Fields(text)
-		kw := strings.ToLower(fields[0])
+		canon := canonicalKeyword(strings.ToLower(fields[0]))
+		if canon == "" {
+			return selection{}, fmt.Errorf("line %d: unknown keyword %q (expected PROVIDER, FAMILY, MODEL, CONTEXT, or BASEURL)", line, fields[0])
+		}
 		switch {
 		case len(fields) < 2:
-			return selection{}, fmt.Errorf("line %d: %s needs a value", line, strings.ToUpper(kw))
+			return selection{}, fmt.Errorf("line %d: %s needs a value", line, strings.ToUpper(canon))
 		case len(fields) > 2:
-			return selection{}, fmt.Errorf("line %d: %s takes a single value, got %d", line, strings.ToUpper(kw), len(fields)-1)
+			return selection{}, fmt.Errorf("line %d: %s takes a single value, got %d", line, strings.ToUpper(canon), len(fields)-1)
 		}
 		value := fields[1]
 
-		if prev, ok := seen[kw]; ok {
-			return selection{}, fmt.Errorf("line %d: duplicate %s (already set on line %d)", line, strings.ToUpper(kw), prev)
+		if prev, ok := seen[canon]; ok {
+			return selection{}, fmt.Errorf("line %d: duplicate %s (already set on line %d)", line, strings.ToUpper(canon), prev)
 		}
+		seen[canon] = line
 
-		switch kw {
+		switch canon {
 		case kwProvider:
 			sel.provider = value
 		case kwFamily:
 			sel.family = value
 		case kwModel:
 			sel.model = value
-		default:
-			return selection{}, fmt.Errorf("line %d: unknown keyword %q (expected PROVIDER, FAMILY, or MODEL)", line, fields[0])
+		case kwContext:
+			sel.context = value
+		case kwBaseURL:
+			sel.baseURL = value
 		}
-		seen[kw] = line
 	}
 	if err := scanner.Err(); err != nil {
 		return selection{}, err
@@ -96,15 +119,19 @@ func stripComment(s string) string {
 	return s
 }
 
-// formatOutfit renders a selection as a canonical, UPPERCASE Outfit file.
+// formatOutfit renders a selection as a canonical, UPPERCASE Outfit file. The
+// "%-8s" padding aligns every value at the same column.
 func formatOutfit(sel selection) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "PROVIDER %s\n", sel.provider)
-	if sel.family != "" {
-		fmt.Fprintf(&b, "FAMILY   %s\n", sel.family)
+	line := func(keyword, value string) {
+		if value != "" {
+			fmt.Fprintf(&b, "%-8s %s\n", keyword, value)
+		}
 	}
-	if sel.model != "" {
-		fmt.Fprintf(&b, "MODEL    %s\n", sel.model)
-	}
+	line("PROVIDER", sel.provider)
+	line("FAMILY", sel.family)
+	line("MODEL", sel.model)
+	line("CONTEXT", sel.context)
+	line("BASEURL", sel.baseURL)
 	return b.String()
 }

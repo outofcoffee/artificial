@@ -198,40 +198,59 @@ func removeConfig(path, providerID string, modelKeys []string) (int, error) {
 	return removed, nil
 }
 
-// loadConfigState reads the opencode config and reports the configured
-// provider ids, each provider's model keys (sorted), and the default model.
-// It is the inverse of writeConfig, used to reconstruct an Outfit on export.
-func loadConfigState(path string) (providers []string, models map[string][]string, defaultModel string, err error) {
+// providerState is one configured provider, read back from the opencode config:
+// its model keys (sorted), any options.baseURL, and the per-model limit.context
+// for those models that set one. It is what `oc-config export` reconstructs an
+// Outfit from.
+type providerState struct {
+	modelKeys []string
+	baseURL   string
+	contexts  map[string]int
+}
+
+// loadConfigState reads the opencode config and reports each configured
+// provider's state plus the top-level default model. It is the inverse of
+// writeConfig, used to reconstruct an Outfit on export.
+func loadConfigState(path string) (providers map[string]providerState, defaultModel string, err error) {
 	root, err := loadRoot(path)
 	if err != nil {
-		return nil, nil, "", err
+		return nil, "", err
 	}
 	if m := root.Find("/model"); m != nil {
 		_ = json.Unmarshal(m.Pack(), &defaultModel)
 	}
 
-	models = map[string][]string{}
+	providers = map[string]providerState{}
 	pv := root.Find("/provider")
 	if pv == nil {
-		return nil, models, defaultModel, nil
+		return providers, defaultModel, nil
 	}
-	var provMap map[string]struct {
-		Models map[string]json.RawMessage `json:"models"`
+	var raw map[string]struct {
+		Options struct {
+			BaseURL string `json:"baseURL"`
+		} `json:"options"`
+		Models map[string]struct {
+			Limit struct {
+				Context int `json:"context"`
+			} `json:"limit"`
+		} `json:"models"`
 	}
-	if err := json.Unmarshal(pv.Pack(), &provMap); err != nil {
-		return nil, nil, "", fmt.Errorf("reading providers from %s: %w", path, err)
+	if err := json.Unmarshal(pv.Pack(), &raw); err != nil {
+		return nil, "", fmt.Errorf("reading providers from %s: %w", path, err)
 	}
-	for name, p := range provMap {
-		providers = append(providers, name)
+	for name, p := range raw {
 		keys := make([]string, 0, len(p.Models))
-		for k := range p.Models {
+		contexts := map[string]int{}
+		for k, m := range p.Models {
 			keys = append(keys, k)
+			if m.Limit.Context > 0 {
+				contexts[k] = m.Limit.Context
+			}
 		}
 		sort.Strings(keys)
-		models[name] = keys
+		providers[name] = providerState{modelKeys: keys, baseURL: p.Options.BaseURL, contexts: contexts}
 	}
-	sort.Strings(providers)
-	return providers, models, defaultModel, nil
+	return providers, defaultModel, nil
 }
 
 // applyPatch marshals and applies an RFC 6902 patch to the config AST.

@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Added
 - feat: add `Outfit` files — declarative, Dockerfile-style provider selections
-  applied with `oc-config apply` (defaults to `./Outfit`)
+  applied with `oc-config apply` (defaults to `./Outfit`). Supports `PROVIDER`,
+  `FAMILY`, `MODEL`, `CONTEXT`, and `BASEURL` instructions
 - feat: add `oc-config export` to capture the current config as an `Outfit`
 
 ### Changed

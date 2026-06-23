@@ -46,6 +46,16 @@ func TestParseOutfit(t *testing.T) {
 			in:   "PROVIDER\tollama\nFAMILY     llama\n",
 			want: selection{provider: "ollama", family: "llama"},
 		},
+		{
+			name: "context and base url",
+			in:   "PROVIDER llamacpp\nMODEL gemma\nCONTEXT 128k\nBASEURL http://localhost:9090/v1\n",
+			want: selection{provider: "llamacpp", model: "gemma", context: "128k", baseURL: "http://localhost:9090/v1"},
+		},
+		{
+			name: "base url aliases",
+			in:   "PROVIDER openai-compatible\nMODEL m\nURL https://gw/v1\n",
+			want: selection{provider: "openai-compatible", model: "m", baseURL: "https://gw/v1"},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -67,6 +77,7 @@ func TestParseOutfit_Errors(t *testing.T) {
 		"keyword no value":  "PROVIDER\n",
 		"too many values":   "PROVIDER a b\n",
 		"duplicate keyword": "PROVIDER a\nPROVIDER b\n",
+		"duplicate alias":   "PROVIDER a\nMODEL m\nBASEURL u1\nURL u2\n",
 	}
 	for name, in := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -78,7 +89,13 @@ func TestParseOutfit_Errors(t *testing.T) {
 }
 
 func TestFormatOutfitRoundTrip(t *testing.T) {
-	sel := selection{provider: "openrouter", family: "deepseek-v4", model: "deepseek/deepseek-v4-pro"}
+	sel := selection{
+		provider: "openrouter",
+		family:   "deepseek-v4",
+		model:    "deepseek/deepseek-v4-pro",
+		context:  "128000",
+		baseURL:  "https://gateway.example/v1",
+	}
 	out := formatOutfit(sel)
 	if !strings.HasPrefix(out, "PROVIDER openrouter\n") {
 		t.Errorf("export not canonical:\n%s", out)
@@ -89,6 +106,57 @@ func TestFormatOutfitRoundTrip(t *testing.T) {
 	}
 	if got != sel {
 		t.Errorf("round-trip changed selection: %+v -> %+v", sel, got)
+	}
+}
+
+// TestCmdApply_ContextAndBaseURL checks that CONTEXT and BASEURL in an Outfit
+// land as limit.context on the model and options.baseURL on the provider.
+func TestCmdApply_ContextAndBaseURL(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+
+	outfit := filepath.Join(dir, "Outfit")
+	mustWrite(t, outfit, "PROVIDER llamacpp\nMODEL gemma\nCONTEXT 128k\nBASEURL http://127.0.0.1:9090/v1\n")
+	captureStdout(t, func() {
+		if err := cmdApply([]string{outfit}); err != nil {
+			t.Fatalf("cmdApply: %v", err)
+		}
+	})
+
+	m := readConfigMap(t, filepath.Join(dir, "opencode", "opencode.json"))
+	llamacpp := m["provider"].(map[string]any)["llamacpp"].(map[string]any)
+	if got := llamacpp["options"].(map[string]any)["baseURL"]; got != "http://127.0.0.1:9090/v1" {
+		t.Errorf("baseURL = %v", got)
+	}
+	model := llamacpp["models"].(map[string]any)["gemma"].(map[string]any)
+	if got := model["limit"].(map[string]any)["context"]; got != float64(128000) {
+		t.Errorf("limit.context = %v, want 128000", got)
+	}
+}
+
+// TestCmdExport_ContextAndBaseURL checks the export side of the round-trip: a
+// non-default base URL and a context window are both recovered.
+func TestCmdExport_ContextAndBaseURL(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+
+	outfit := filepath.Join(dir, "Outfit")
+	mustWrite(t, outfit, "PROVIDER llamacpp\nMODEL gemma\nCONTEXT 200000\nBASEURL http://127.0.0.1:9090/v1\n")
+	captureStdout(t, func() {
+		if err := cmdApply([]string{outfit}); err != nil {
+			t.Fatalf("cmdApply: %v", err)
+		}
+	})
+
+	out := captureStdout(t, func() {
+		if err := cmdExport(nil); err != nil {
+			t.Fatalf("cmdExport: %v", err)
+		}
+	})
+	for _, want := range []string{"PROVIDER llamacpp", "MODEL    gemma", "CONTEXT  200000", "BASEURL  http://127.0.0.1:9090/v1"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("export missing %q:\n%s", want, out)
+		}
 	}
 }
 
@@ -189,6 +257,11 @@ func TestCmdExport_ModelOnlyFallsBackToModel(t *testing.T) {
 	}
 	if strings.Contains(out, "FAMILY") {
 		t.Errorf("did not expect a FAMILY line for an unrecognised model:\n%s", out)
+	}
+	// The provider sits on its catalogue-default base URL, so export should not
+	// record a redundant BASEURL line.
+	if strings.Contains(out, "BASEURL") {
+		t.Errorf("did not expect a BASEURL line for the default base URL:\n%s", out)
 	}
 }
 

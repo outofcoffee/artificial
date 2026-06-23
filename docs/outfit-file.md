@@ -10,6 +10,8 @@ apply it with a single command instead of remembering flags. Think of it like a
 PROVIDER openrouter
 FAMILY   deepseek-v4
 MODEL    deepseek/deepseek-v4-pro   # optional; becomes the default model
+CONTEXT  128k                       # optional; context window
+BASEURL  https://gateway/v1         # optional; API base URL override
 ```
 
 Applying it is the same as running the equivalent `oc-config add`, so everything
@@ -36,14 +38,21 @@ One instruction per line: a keyword followed by a single value.
 | `PROVIDER` | yes                        | `--provider`   | `PROVIDER openrouter`          |
 | `FAMILY`   | one of `FAMILY` / `MODEL`  | `--model-family` | `FAMILY deepseek-v4`         |
 | `MODEL`    | one of `FAMILY` / `MODEL`  | `--model`      | `MODEL deepseek/deepseek-v4-pro` |
+| `CONTEXT`  | no                         | `--context`    | `CONTEXT 128k`                 |
+| `BASEURL`  | no                         | `--base-url`   | `BASEURL https://gateway/v1`   |
 
 Rules:
 
 - An Outfit describes **exactly one provider**. `PROVIDER` is required and may
-  appear only once; so may `FAMILY` and `MODEL`.
+  appear only once; so may every other keyword.
 - You need **at least one** of `FAMILY` or `MODEL`. Give a `FAMILY` to add all
   of that family's models; give a `MODEL` to add or pin a specific one; give
   both to add the family but make `MODEL` the default.
+- `CONTEXT` sets the context window for the model(s). It accepts human suffixes
+  (`128k`, `1m`) or an absolute count (`200000`).
+- `BASEURL` overrides the provider's API base URL — handy for a gateway or a
+  llama.cpp server on a non-default port. `URL`, `BASE-URL`, and `BASE_URL` are
+  accepted as aliases.
 - Keywords are **case-insensitive** — `provider`, `Provider`, and `PROVIDER` are
   all accepted — but **UPPERCASE is canonical** and is what `oc-config export`
   writes.

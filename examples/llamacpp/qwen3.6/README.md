@@ -91,29 +91,24 @@ oc-config apply examples/llamacpp/qwen3.6/Outfit
 oc-config apply
 ```
 
-The Outfit is just:
+The Outfit is:
 
 ```dockerfile
 PROVIDER llamacpp
 MODEL    qwen3.6-35b-a3b
+CONTEXT  32768            # match the server's --ctx-size
 ```
 
 The model name is just a label — `llama-server` serves whichever model it has
 loaded regardless of what's requested — so call it whatever you find readable.
+`CONTEXT` matches opencode's context window to the `--ctx-size` you launched the
+server with, so it doesn't overshoot what `llama-server` will accept.
 
-Running on a non-default host or port? Set `LLAMACPP_BASE_URL` (or the
-provider-agnostic `OC_CONFIG_BASE_URL`) when you apply:
+Running on a non-default host or port? Add a `BASEURL` line to the Outfit (the
+file ships one commented out):
 
-```sh
-LLAMACPP_BASE_URL=http://127.0.0.1:9090/v1 oc-config apply
-```
-
-Want opencode's context window to match the `--ctx-size` you launched the
-server with, so it doesn't overshoot what `llama-server` will accept? Layer it
-on with `oc-config add` after applying — it merges into the same model:
-
-```sh
-oc-config add -p llamacpp -m qwen3.6-35b-a3b --context 32k
+```dockerfile
+BASEURL http://127.0.0.1:9090/v1
 ```
 
 Now start `opencode` and select `llamacpp/qwen3.6-35b-a3b`.

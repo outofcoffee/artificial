@@ -108,6 +108,8 @@ opencode? Drop an **Outfit** in your project:
 PROVIDER openrouter
 FAMILY   deepseek-v4
 MODEL    deepseek/deepseek-v4-pro   # optional; becomes the default
+CONTEXT  128k                       # optional; context window
+BASEURL  https://gateway/v1         # optional; API base URL override
 ```
 
 ```sh

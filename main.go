@@ -29,6 +29,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -252,56 +254,99 @@ func cmdExport(args []string) error {
 	if err != nil {
 		return err
 	}
-	present, models, defaultModel, err := loadConfigState(configFile)
+	states, defaultModel, err := loadConfigState(configFile)
 	if err != nil {
 		return err
 	}
-	if len(present) == 0 {
+	if len(states) == 0 {
 		return fmt.Errorf("no providers configured in %s", configFile)
 	}
 
+	names := make([]string, 0, len(states))
+	for n := range states {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+
 	// Pick which provider to export: the flag, else the default model's
 	// provider, else the sole configured provider.
-	if provider == "" && len(present) == 1 {
-		provider = present[0]
+	if provider == "" && len(names) == 1 {
+		provider = names[0]
 	}
 	if provider == "" && defaultModel != "" {
 		provider = strings.SplitN(defaultModel, "/", 2)[0]
 	}
 	if provider == "" {
-		return fmt.Errorf("multiple providers configured; choose one with -p (have: %s)", strings.Join(present, ", "))
+		return fmt.Errorf("multiple providers configured; choose one with -p (have: %s)", strings.Join(names, ", "))
 	}
-	keys, ok := models[provider]
+	st, ok := states[provider]
 	if !ok {
-		return fmt.Errorf("provider %q is not configured in %s (have: %s)", provider, configFile, strings.Join(present, ", "))
+		return fmt.Errorf("provider %q is not configured in %s (have: %s)", provider, configFile, strings.Join(names, ", "))
 	}
 
-	sel := selection{provider: provider}
+	sel := selection{provider: provider, baseURL: st.baseURL}
 	if prefix := provider + "/"; strings.HasPrefix(defaultModel, prefix) {
 		sel.model = strings.TrimPrefix(defaultModel, prefix)
 	}
 
+	cat, catErr := loadCatalogFrom(resolveCatalogPath(providers))
+
 	// Prefer naming a family when the configured models match one, and drop a
 	// MODEL line that would only restate that family's default.
-	if cat, err := loadCatalogFrom(resolveCatalogPath(providers)); err == nil {
+	if catErr == nil {
 		if p, ok := cat.Providers[provider]; ok {
-			if fam := matchFamily(p, keys); fam != "" {
+			if fam := matchFamily(p, st.modelKeys); fam != "" {
 				sel.family = fam
 				if p.Families[fam].DefaultModel == sel.model {
 					sel.model = ""
 				}
+			}
+			// Drop a baseURL that only restates the catalogue's default — keep it
+			// only when it is a genuine override worth recording.
+			if def, _ := p.Options["baseURL"].(string); sel.baseURL == def {
+				sel.baseURL = ""
 			}
 		}
 	}
 
 	// Ensure the Outfit still selects something if we recognised neither a
 	// family nor a default model.
-	if sel.family == "" && sel.model == "" && len(keys) > 0 {
-		sel.model = keys[0]
+	if sel.family == "" && sel.model == "" && len(st.modelKeys) > 0 {
+		sel.model = st.modelKeys[0]
 	}
+
+	// Reconstruct the context window when the exported models agree on one.
+	sel.context = exportContext(sel, st)
 
 	fmt.Print(formatOutfit(sel))
 	return nil
+}
+
+// exportContext returns the context window to record for an export, as a token
+// count string, when the models the Outfit selects all share a single value.
+// It returns "" when no context was set or the models disagree (e.g. a config
+// hand-edited to differ), so export never invents or guesses a value.
+func exportContext(sel selection, st providerState) string {
+	var keys []string
+	switch {
+	case sel.family != "":
+		keys = st.modelKeys // a matched family covers exactly these models
+	case sel.model != "":
+		keys = []string{sel.model}
+	}
+	distinct := map[int]bool{}
+	for _, k := range keys {
+		if c, ok := st.contexts[k]; ok {
+			distinct[c] = true
+		}
+	}
+	if len(distinct) != 1 {
+		return ""
+	}
+	for c := range distinct {
+		return strconv.Itoa(c)
+	}
+	return ""
 }
 
 func cmdRemove(args []string) error {
