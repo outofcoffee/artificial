@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [1.1.0] - 2026-06-24
+### Added
+- feat: add --version flag
+
+### Changed
+- ci: add dependabot config with grouped updates
+- ci: run goreleaser in dry-run mode on non-release builds
+- refactor: organise code into cmd/ and internal/ packages
+
 ## [1.0.1] - 2026-06-24
 ### Changed
 - ci: upgrade checkout to v7 and setup-go to v6
