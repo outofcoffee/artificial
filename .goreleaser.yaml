@@ -39,6 +39,9 @@ brews:
     homepage: "https://github.com/lucinate-ai/outfit"
     description: "Configure opencode provider catalogues"
     license: "MIT"
+    # Publish into Formula/ — Homebrew ignores root-level .rb files once a tap
+    # has a Formula directory (the shared tap already has one for other casks).
+    directory: Formula
     # Skip publishing the formula for pre-release tags.
     skip_upload: auto
     commit_author:
