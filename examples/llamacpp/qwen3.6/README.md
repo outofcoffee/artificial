@@ -1,7 +1,7 @@
 # Qwen3.6-35B-A3B on llama.cpp
 
 Run Unsloth's GGUF build of Qwen3.6-35B-A3B locally with `llama-server`, then
-point opencode at it with `oc-config`.
+point opencode at it with the [`Outfit`](Outfit) in this directory.
 
 `A3B` means it's a mixture-of-experts model: ~35B total parameters but only ~3B
 active per token, so it's far lighter to run than its size suggests.
@@ -82,29 +82,38 @@ curl http://127.0.0.1:8080/v1/models
 ## 3. Point opencode at it
 
 `llama-server` speaks the OpenAI-compatible API, which is exactly what the
-`llamacpp` provider targets (default base URL `http://localhost:8080/v1`):
+`llamacpp` provider targets (default base URL `http://localhost:8080/v1`). Apply
+the [`Outfit`](Outfit) in this directory:
 
 ```sh
-oc-config add --provider llamacpp --model qwen3.6-35b-a3b
-# short form:
-oc-config add -p llamacpp -m qwen3.6-35b-a3b
+oc-config apply examples/llamacpp/qwen3.6/Outfit
+# or, from this directory:
+oc-config apply
+```
+
+The Outfit is just:
+
+```dockerfile
+PROVIDER llamacpp
+MODEL    qwen3.6-35b-a3b
 ```
 
 The model name is just a label — `llama-server` serves whichever model it has
 loaded regardless of what's requested — so call it whatever you find readable.
 
-Match opencode's context window to the `--ctx-size` you launched the server
-with, so it doesn't overshoot what `llama-server` will accept:
+Running on a non-default host or port? Set `LLAMACPP_BASE_URL` (or the
+provider-agnostic `OC_CONFIG_BASE_URL`) when you apply:
+
+```sh
+LLAMACPP_BASE_URL=http://127.0.0.1:9090/v1 oc-config apply
+```
+
+Want opencode's context window to match the `--ctx-size` you launched the
+server with, so it doesn't overshoot what `llama-server` will accept? Layer it
+on with `oc-config add` after applying — it merges into the same model:
 
 ```sh
 oc-config add -p llamacpp -m qwen3.6-35b-a3b --context 32k
-```
-
-Running on a non-default host or port? Point the provider at it with the
-`--base-url`/`-b` flag (or `LLAMACPP_BASE_URL`):
-
-```sh
-oc-config add -p llamacpp -m qwen3.6-35b-a3b --base-url http://127.0.0.1:9090/v1
 ```
 
 Now start `opencode` and select `llamacpp/qwen3.6-35b-a3b`.

@@ -1,0 +1,4 @@
+# Gemma-4-12B-IT served locally by llama.cpp.
+# The model name is just a label llama-server reports; see the README.
+PROVIDER llamacpp
+MODEL    gemma-4-12b-it

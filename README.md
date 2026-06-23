@@ -58,6 +58,8 @@ Then just run `opencode`.
 oc-config list
 oc-config add    --provider <name> [--model-family <family>] [--model <id>] [--context <size>] [--base-url <url>]
 oc-config remove --provider <name> [--model-family <family>] [--model <id>]
+oc-config apply  [path]                 # apply an Outfit file (default ./Outfit)
+oc-config export [--provider <name>]    # print the current config as an Outfit
 ```
 
 Short flags: `-p` (provider), `-f` (model-family), `-m` (model), `-c` (context), `-b` (base-url).
@@ -96,6 +98,28 @@ if it pointed at something you removed.
 forgiving: `128k`, `1m`, `1.5m`, `200000`, `128,000`, even `128 K tokens` all
 land where you'd expect (`k`/`m`/`g` are decimal — `128k` is 128,000 tokens).
 
+## Outfit files
+
+Prefer to keep a provider selection in a file — like a `Dockerfile`, but for
+opencode? Drop an **Outfit** in your project:
+
+```dockerfile
+# Outfit
+PROVIDER openrouter
+FAMILY   deepseek-v4
+MODEL    deepseek/deepseek-v4-pro   # optional; becomes the default
+```
+
+```sh
+oc-config apply              # reads ./Outfit and applies it
+oc-config apply path/to/Outfit
+oc-config export > Outfit    # capture your current setup as an Outfit
+```
+
+An Outfit describes one provider selection and applies exactly like the
+equivalent `add`. Full syntax is in [`docs/outfit-file.md`](docs/outfit-file.md),
+and ready-to-use examples live under [`examples/`](examples/).
+
 ## Keys and endpoints
 
 Each provider declares which environment variable holds its key (`oc-config
@@ -118,10 +142,11 @@ and the per-provider variables (`OLLAMA_BASE_URL`, `LLAMACPP_BASE_URL`,
 
 ## Guides
 
-Provider- and model-specific walkthroughs live in [`docs/`](docs/):
+Provider- and model-specific walkthroughs live in [`examples/`](examples/), each
+with a ready-to-apply `Outfit`:
 
-- [Qwen3.6-35B-A3B on llama.cpp](docs/llamacpp/qwen3.6.md)
-- [Gemma-4-12B-IT on llama.cpp](docs/llamacpp/gemma4.md)
+- [Qwen3.6-35B-A3B on llama.cpp](examples/llamacpp/qwen3.6/README.md)
+- [Gemma-4-12B-IT on llama.cpp](examples/llamacpp/gemma4/README.md)
 
 ## Adding providers and models
 

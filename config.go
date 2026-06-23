@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 
 	"github.com/tailscale/hujson"
@@ -195,6 +196,42 @@ func removeConfig(path, providerID string, modelKeys []string) (int, error) {
 		return 0, err
 	}
 	return removed, nil
+}
+
+// loadConfigState reads the opencode config and reports the configured
+// provider ids, each provider's model keys (sorted), and the default model.
+// It is the inverse of writeConfig, used to reconstruct an Outfit on export.
+func loadConfigState(path string) (providers []string, models map[string][]string, defaultModel string, err error) {
+	root, err := loadRoot(path)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	if m := root.Find("/model"); m != nil {
+		_ = json.Unmarshal(m.Pack(), &defaultModel)
+	}
+
+	models = map[string][]string{}
+	pv := root.Find("/provider")
+	if pv == nil {
+		return nil, models, defaultModel, nil
+	}
+	var provMap map[string]struct {
+		Models map[string]json.RawMessage `json:"models"`
+	}
+	if err := json.Unmarshal(pv.Pack(), &provMap); err != nil {
+		return nil, nil, "", fmt.Errorf("reading providers from %s: %w", path, err)
+	}
+	for name, p := range provMap {
+		providers = append(providers, name)
+		keys := make([]string, 0, len(p.Models))
+		for k := range p.Models {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		models[name] = keys
+	}
+	sort.Strings(providers)
+	return providers, models, defaultModel, nil
 }
 
 // applyPatch marshals and applies an RFC 6902 patch to the config AST.

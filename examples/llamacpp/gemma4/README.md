@@ -2,7 +2,7 @@
 
 Run Unsloth's GGUF build of Gemma-4-12B-IT locally with `llama-server`, using
 Multi-Token Prediction (MTP) for faster inference, then point opencode at it
-with `oc-config`.
+with the [`Outfit`](Outfit) in this directory.
 
 This model uses MTP: a small draft model (`mtp-gemma-4-12b-it.gguf`) runs
 ahead of the main model to propose candidate tokens, which the main model
@@ -107,29 +107,38 @@ curl http://127.0.0.1:8080/v1/models
 ## 3. Point opencode at it
 
 `llama-server` speaks the OpenAI-compatible API, which is exactly what the
-`llamacpp` provider targets (default base URL `http://localhost:8080/v1`):
+`llamacpp` provider targets (default base URL `http://localhost:8080/v1`). Apply
+the [`Outfit`](Outfit) in this directory:
 
 ```sh
-oc-config add --provider llamacpp --model gemma-4-12b-it
-# short form:
-oc-config add -p llamacpp -m gemma-4-12b-it
+oc-config apply examples/llamacpp/gemma4/Outfit
+# or, from this directory:
+oc-config apply
+```
+
+The Outfit is just:
+
+```dockerfile
+PROVIDER llamacpp
+MODEL    gemma-4-12b-it
 ```
 
 The model name is just a label — `llama-server` serves whichever model it has
 loaded regardless of what's requested — so call it whatever you find readable.
 
-Match opencode's context window to the `--ctx-size` you launched the server
-with, so it doesn't overshoot what `llama-server` will accept:
+Running on a non-default host or port? Set `LLAMACPP_BASE_URL` (or the
+provider-agnostic `OC_CONFIG_BASE_URL`) when you apply:
+
+```sh
+LLAMACPP_BASE_URL=http://127.0.0.1:9090/v1 oc-config apply
+```
+
+Want opencode's context window to match the `--ctx-size` you launched the
+server with, so it doesn't overshoot what `llama-server` will accept? Layer it
+on with `oc-config add` after applying — it merges into the same model:
 
 ```sh
 oc-config add -p llamacpp -m gemma-4-12b-it --context 32k
-```
-
-Running on a non-default host or port? Point the provider at it with the
-`--base-url`/`-b` flag (or `LLAMACPP_BASE_URL`):
-
-```sh
-oc-config add -p llamacpp -m gemma-4-12b-it --base-url http://127.0.0.1:9090/v1
 ```
 
 Now start `opencode` and select `llamacpp/gemma-4-12b-it`.

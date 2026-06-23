@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [Unreleased]
+### Added
+- feat: add `Outfit` files — declarative, Dockerfile-style provider selections
+  applied with `oc-config apply` (defaults to `./Outfit`)
+- feat: add `oc-config export` to capture the current config as an `Outfit`
+
+### Changed
+- docs: document the `Outfit` file format in `docs/outfit-file.md`
+- docs: move the llama.cpp guides under `examples/`, each with an `Outfit`
+
 ## [0.2.0] - 2026-06-22
 ### Added
 - feat: allow the provider catalogue to be overridden at runtime

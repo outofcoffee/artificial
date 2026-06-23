@@ -113,6 +113,33 @@ func (f *Family) modelKeys() []string {
 	return keys
 }
 
+// matchFamily returns the name of the provider family whose model set exactly
+// matches keys, or "" if none does. It lets `oc-config export` name a family
+// instead of listing the individual models it expands to.
+func matchFamily(p *Provider, keys []string) string {
+	want := make(map[string]bool, len(keys))
+	for _, k := range keys {
+		want[k] = true
+	}
+	for _, name := range p.sortedFamilyNames() {
+		fk := p.Families[name].modelKeys()
+		if len(fk) != len(want) {
+			continue
+		}
+		matched := true
+		for _, k := range fk {
+			if !want[k] {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return name
+		}
+	}
+	return ""
+}
+
 // buildProviderBlock turns a provider plus an optional family and/or explicit
 // model into an opencode provider block, returning the block and the
 // fully-qualified default model (provider/model), or "" if none was selected.

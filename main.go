@@ -11,6 +11,8 @@
 //	oc-config list
 //	oc-config add    --provider <name> [--model-family <family>] [--model <id>]
 //	oc-config remove --provider <name> [--model-family <family>] [--model <id>]
+//	oc-config apply  [path]   # apply an Outfit file (defaults to ./Outfit)
+//	oc-config export [-p name] # print the current config as an Outfit
 //
 // Short flags: -p (provider), -f (model-family), -m (model), -c (context),
 // -b (base-url).
@@ -18,6 +20,9 @@
 // The API base URL can be overridden for any provider with --base-url/-b or the
 // OC_CONFIG_BASE_URL environment variable; the flag wins over the env var, and
 // either wins over the catalogue's defaults.
+//
+// An Outfit is a declarative, Dockerfile-style file describing one provider
+// selection, applied with `oc-config apply`; see outfit.go.
 package main
 
 import (
@@ -47,6 +52,10 @@ func run(args []string) error {
 		return cmdRemove(rest)
 	case "list":
 		return cmdList(rest)
+	case "apply":
+		return cmdApply(rest)
+	case "export":
+		return cmdExport(rest)
 	case "help", "-h", "--help":
 		usage()
 		return nil
@@ -63,6 +72,8 @@ Usage:
   oc-config list
   oc-config add    --provider <name> [--model-family <family>] [--model <id>] [--context <size>]
   oc-config remove --provider <name> [--model-family <family>] [--model <id>]
+  oc-config apply  [path]              (defaults to ./Outfit)
+  oc-config export [--provider <name>]
 
 Flags:
   -p, --provider       provider name (see `+"`oc-config list`"+`)
@@ -80,6 +91,9 @@ add: deep-merges the provider into the opencode config, preserving everything
      model's limit.context window.
 remove: removes the provider, or just the named models when a family/model is
         given. Clears the default model if it pointed at something removed.
+apply: applies an Outfit file — a declarative, Dockerfile-style description of
+       one provider selection — as if you had run the equivalent add.
+export: prints the current config as an Outfit (oc-config export > Outfit).
 `)
 }
 
@@ -121,8 +135,15 @@ func cmdAdd(args []string) error {
 	if err != nil {
 		return err
 	}
+	return applySelection(sel)
+}
+
+// applySelection writes a single provider selection into the opencode config.
+// It is the shared core of `add` and `apply`: both resolve a selection (from
+// flags or an Outfit file) and hand it here.
+func applySelection(sel selection) error {
 	if sel.family == "" && sel.model == "" {
-		return fmt.Errorf("specify --model-family/-f and/or --model/-m")
+		return fmt.Errorf("a provider selection needs a model family and/or a model")
 	}
 
 	cat, err := loadCatalogFrom(resolveCatalogPath(sel.providers))
@@ -181,6 +202,105 @@ func cmdAdd(args []string) error {
 		}
 	}
 	fmt.Println("\nRun 'opencode' from any directory to use the configuration.")
+	return nil
+}
+
+// cmdApply reads an Outfit file and applies it. The path defaults to ./Outfit
+// when none is given, so a bare `oc-config apply` works in a directory that
+// holds one.
+func cmdApply(args []string) error {
+	fs := flag.NewFlagSet("apply", flag.ContinueOnError)
+	var providers string
+	fs.StringVar(&providers, "providers", "", "path to a providers.yaml override")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	path := DefaultOutfitFile
+	if rest := fs.Args(); len(rest) > 0 {
+		path = rest[0]
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) && path == DefaultOutfitFile {
+			return fmt.Errorf("no %s found in the current directory (pass a path: oc-config apply <file>)", DefaultOutfitFile)
+		}
+		return fmt.Errorf("reading %s: %w", path, err)
+	}
+	sel, err := parseOutfit(data)
+	if err != nil {
+		return fmt.Errorf("%s: %w", path, err)
+	}
+	sel.providers = providers
+	return applySelection(sel)
+}
+
+// cmdExport reconstructs an Outfit from the current opencode config and prints
+// it to stdout, so an existing setup can be captured (oc-config export > Outfit).
+func cmdExport(args []string) error {
+	fs := flag.NewFlagSet("export", flag.ContinueOnError)
+	var provider, providers string
+	fs.StringVar(&provider, "provider", "", "provider to export")
+	fs.StringVar(&provider, "p", "", "provider to export (shorthand)")
+	fs.StringVar(&providers, "providers", "", "path to a providers.yaml override")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	configFile, err := resolveConfigFile()
+	if err != nil {
+		return err
+	}
+	present, models, defaultModel, err := loadConfigState(configFile)
+	if err != nil {
+		return err
+	}
+	if len(present) == 0 {
+		return fmt.Errorf("no providers configured in %s", configFile)
+	}
+
+	// Pick which provider to export: the flag, else the default model's
+	// provider, else the sole configured provider.
+	if provider == "" && len(present) == 1 {
+		provider = present[0]
+	}
+	if provider == "" && defaultModel != "" {
+		provider = strings.SplitN(defaultModel, "/", 2)[0]
+	}
+	if provider == "" {
+		return fmt.Errorf("multiple providers configured; choose one with -p (have: %s)", strings.Join(present, ", "))
+	}
+	keys, ok := models[provider]
+	if !ok {
+		return fmt.Errorf("provider %q is not configured in %s (have: %s)", provider, configFile, strings.Join(present, ", "))
+	}
+
+	sel := selection{provider: provider}
+	if prefix := provider + "/"; strings.HasPrefix(defaultModel, prefix) {
+		sel.model = strings.TrimPrefix(defaultModel, prefix)
+	}
+
+	// Prefer naming a family when the configured models match one, and drop a
+	// MODEL line that would only restate that family's default.
+	if cat, err := loadCatalogFrom(resolveCatalogPath(providers)); err == nil {
+		if p, ok := cat.Providers[provider]; ok {
+			if fam := matchFamily(p, keys); fam != "" {
+				sel.family = fam
+				if p.Families[fam].DefaultModel == sel.model {
+					sel.model = ""
+				}
+			}
+		}
+	}
+
+	// Ensure the Outfit still selects something if we recognised neither a
+	// family nor a default model.
+	if sel.family == "" && sel.model == "" && len(keys) > 0 {
+		sel.model = keys[0]
+	}
+
+	fmt.Print(formatOutfit(sel))
 	return nil
 }
 
