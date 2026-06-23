@@ -13,6 +13,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Full history and tags so the GoReleaser dry run can build the
+          # changelog, matching the real release.
+          fetch-depth: 0
 
       - uses: actions/setup-go@v6
         with:
@@ -34,5 +38,8 @@ jobs:
       - name: Test
         run: go test ./... -race -cover
 
-      - name: Build
-        run: go build -o outfit ./cmd/outfit
+      # Exercise the full release pipeline without publishing: --snapshot
+      # builds every target (and the Homebrew formula) but skips tagging and
+      # upload, so the release config is validated on every push and PR.
+      - name: GoReleaser (dry run)
+        run: curl -sfL https://goreleaser.com/static/run | bash -s -- release --snapshot --clean
