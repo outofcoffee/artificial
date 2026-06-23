@@ -62,6 +62,35 @@ func TestCatalogIntegrity(t *testing.T) {
 	}
 }
 
+// TestMatchFamily checks the reverse lookup used by `oc-config export`: a set of
+// configured model keys maps back to a family only when it matches exactly.
+func TestMatchFamily(t *testing.T) {
+	cat, _ := loadCatalog()
+	p := cat.Providers["openrouter"]
+	famKeys := p.Families["deepseek-v4"].modelKeys()
+
+	if got := matchFamily(p, famKeys); got != "deepseek-v4" {
+		t.Errorf("exact match = %q, want deepseek-v4", got)
+	}
+
+	// A superset (all the family's models plus a stray) is not a match.
+	if got := matchFamily(p, append(append([]string{}, famKeys...), "stray-model")); got != "" {
+		t.Errorf("superset matched %q, want no match", got)
+	}
+
+	// A subset (one model short) is not a match either.
+	if len(famKeys) > 1 {
+		if got := matchFamily(p, famKeys[:len(famKeys)-1]); got != "" {
+			t.Errorf("subset matched %q, want no match", got)
+		}
+	}
+
+	// Unrelated keys match nothing.
+	if got := matchFamily(p, []string{"something-else"}); got != "" {
+		t.Errorf("unrelated keys matched %q, want no match", got)
+	}
+}
+
 func TestResolveCatalogPath(t *testing.T) {
 	t.Setenv(providersEnv, "/from/env.yaml")
 	if got := resolveCatalogPath("/from/flag.yaml"); got != "/from/flag.yaml" {

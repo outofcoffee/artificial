@@ -20,11 +20,13 @@ Run a single test: `go test -run TestWriteConfig_Idempotent ./...`
 
 ## Layout
 
-- `main.go` — CLI: command dispatch (`add`/`remove`/`list`), flag parsing (`parseSelection` registers both long and short flags against the same vars), and user-facing output.
-- `catalog.go` — the embedded provider catalogue (`//go:embed providers.yaml`), its types, and `buildProviderBlock`, which turns a provider+family+model selection into an opencode provider block. The catalogue can be overridden at runtime via the `--providers` flag or `OC_CONFIG_PROVIDERS` env var (flag > env > embedded; see `resolveCatalogPath`/`loadCatalogFrom`).
-- `config.go` — opencode config IO: JSONC read/merge/write, env/key resolution, JSON-Pointer helpers.
+- `main.go` — CLI: command dispatch (`add`/`remove`/`list`/`apply`/`export`), flag parsing (`parseSelection` registers both long and short flags against the same vars), and user-facing output. `add` and `apply` share `applySelection`, the core that writes one provider selection.
+- `outfit.go` — the `Outfit` file format: a flat, Dockerfile-style description of one provider selection (`PROVIDER`/`FAMILY`/`MODEL`/`CONTEXT`/`BASEURL`, the last two mapping to `--context`/`--base-url`). `parseOutfit` reads it into a `selection` (keywords case-insensitive via `canonicalKeyword`, UPPERCASE canonical, `#` comments); `formatOutfit` renders one back out for `export`. `apply` defaults to `./Outfit` (`DefaultOutfitFile`).
+- `catalog.go` — the embedded provider catalogue (`//go:embed providers.yaml`), its types, and `buildProviderBlock`, which turns a provider+family+model selection into an opencode provider block. `matchFamily` does the reverse for `export` (configured models -> family name). The catalogue can be overridden at runtime via the `--providers` flag or `OC_CONFIG_PROVIDERS` env var (flag > env > embedded; see `resolveCatalogPath`/`loadCatalogFrom`).
+- `config.go` — opencode config IO: JSONC read/merge/write, env/key resolution, JSON-Pointer helpers. `loadConfigState` reads the config back (configured providers, their model keys, the default model) for `export`.
 - `providers.yaml` — externalised provider/model-family data (URLs, model ids, key env vars). **Add providers/models here, not in Go.** Embedded at build time but kept external for maintenance.
-- `*_test.go` — `catalog_test.go` (catalogue integrity + `buildProviderBlock`), `config_test.go` (merge/remove/IO), `main_test.go` (CLI layer).
+- `examples/` — runnable guides, each a directory with a README and an `Outfit`.
+- `*_test.go` — `catalog_test.go` (catalogue integrity + `buildProviderBlock`), `config_test.go` (merge/remove/IO), `main_test.go` (CLI layer), `outfit_test.go` (Outfit parse/format + `apply`/`export`).
 
 ## Architecture notes (the important part)
 
