@@ -62,6 +62,7 @@ outfit add    --provider <name> [--model-family <family>] [--model <id>] [--cont
 outfit remove --provider <name> [--model-family <family>] [--model <id>]
 outfit apply  [path]                 # apply an Outfit file (default ./Outfit)
 outfit export [--provider <name>]    # print the current config as an Outfit
+outfit init-providers [path]         # write the built-in catalogue out to edit
 ```
 
 Short flags: `-p` (provider), `-f` (model-family), `-m` (model), `-c` (context), `-b` (base-url).
@@ -164,6 +165,15 @@ flag wins, then the env var, then the built-in default:
 ```sh
 outfit list --providers ./my-providers.yaml
 OUTFIT_PROVIDERS=./my-providers.yaml outfit list
+```
+
+Need a starting point? `init-providers` drops the built-in catalogue into the
+current directory (it won't overwrite an existing file — pass a path or
+`--force` if you mean to):
+
+```sh
+outfit init-providers                 # writes ./providers.yaml
+outfit list --providers providers.yaml
 ```
 
 The `.env` file and the built binary are git-ignored.
