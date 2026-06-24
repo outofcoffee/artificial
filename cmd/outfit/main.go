@@ -16,9 +16,9 @@
 //	outfit init-providers [path] # write the embedded providers.yaml out
 //
 // Short flags: -p (provider), -f (model-family), -m (model), -c (context),
-// -b (base-url).
+// -u (base-url).
 //
-// The API base URL can be overridden for any provider with --base-url/-b or the
+// The API base URL can be overridden for any provider with --base-url/-u or the
 // OUTFIT_BASE_URL environment variable; the flag wins over the env var, and
 // either wins over the catalogue's defaults.
 //
@@ -101,7 +101,7 @@ Flags:
   -m, --model          model id to set as default / to add or remove
   -c, --context        context window size for the added model(s); accepts
                        human suffixes (128k, 1m) or an absolute count (200000)
-  -b, --base-url       override the provider API base URL
+  -u, --base-url       override the provider API base URL
                        (or set OUTFIT_BASE_URL)
       --providers      path to a providers.yaml override
                        (or set OUTFIT_PROVIDERS)
@@ -134,7 +134,7 @@ func parseSelection(name string, args []string) (outfit.Selection, error) {
 	fs.StringVar(&s.Context, "c", "", "context window size (shorthand)")
 	fs.StringVar(&s.Providers, "providers", "", "path to a providers.yaml override")
 	fs.StringVar(&s.BaseURL, "base-url", "", "override the provider API base URL")
-	fs.StringVar(&s.BaseURL, "b", "", "API base URL override (shorthand)")
+	fs.StringVar(&s.BaseURL, "u", "", "API base URL override (shorthand)")
 	if err := fs.Parse(args); err != nil {
 		return s, err
 	}
