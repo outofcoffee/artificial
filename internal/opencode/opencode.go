@@ -203,12 +203,13 @@ func RemoveConfig(path, providerID string, modelKeys []string) (int, error) {
 
 // ProviderState is one configured provider, read back from the opencode config:
 // its model keys (sorted), any options.baseURL, and the per-model limit.context
-// for those models that set one. It is what `outfit export` reconstructs an
-// Outfit from.
+// and limit.output for those models that set them. It is what `outfit export`
+// reconstructs an Outfit from.
 type ProviderState struct {
 	ModelKeys []string
 	BaseURL   string
 	Contexts  map[string]int
+	Outputs   map[string]int
 }
 
 // LoadConfigState reads the opencode config and reports each configured
@@ -235,6 +236,7 @@ func LoadConfigState(path string) (providers map[string]ProviderState, defaultMo
 		Models map[string]struct {
 			Limit struct {
 				Context int `json:"context"`
+				Output  int `json:"output"`
 			} `json:"limit"`
 		} `json:"models"`
 	}
@@ -244,14 +246,18 @@ func LoadConfigState(path string) (providers map[string]ProviderState, defaultMo
 	for name, p := range raw {
 		keys := make([]string, 0, len(p.Models))
 		contexts := map[string]int{}
+		outputs := map[string]int{}
 		for k, m := range p.Models {
 			keys = append(keys, k)
 			if m.Limit.Context > 0 {
 				contexts[k] = m.Limit.Context
 			}
+			if m.Limit.Output > 0 {
+				outputs[k] = m.Limit.Output
+			}
 		}
 		sort.Strings(keys)
-		providers[name] = ProviderState{ModelKeys: keys, BaseURL: p.Options.BaseURL, Contexts: contexts}
+		providers[name] = ProviderState{ModelKeys: keys, BaseURL: p.Options.BaseURL, Contexts: contexts, Outputs: outputs}
 	}
 	return providers, defaultModel, nil
 }

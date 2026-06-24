@@ -10,6 +10,7 @@
 //	FAMILY   deepseek-v4
 //	MODEL    deepseek/deepseek-v4-pro   # optional; sets the default
 //	CONTEXT  128k                       # optional; context window
+//	OUTPUT   32k                        # optional; max output tokens
 //	BASEURL  https://gateway/v1         # optional; API base URL override
 //
 // Keywords are matched case-insensitively, but UPPERCASE is canonical (it is
@@ -32,6 +33,7 @@ type Selection struct {
 	Family    string
 	Model     string
 	Context   string
+	Output    string
 	Providers string
 	BaseURL   string
 }
@@ -42,6 +44,7 @@ const (
 	kwFamily   = "family"
 	kwModel    = "model"
 	kwContext  = "context"
+	kwOutput   = "output"
 	kwBaseURL  = "baseurl"
 )
 
@@ -50,7 +53,7 @@ const (
 // "" for an unrecognised keyword.
 func canonicalKeyword(kw string) string {
 	switch kw {
-	case kwProvider, kwFamily, kwModel, kwContext:
+	case kwProvider, kwFamily, kwModel, kwContext, kwOutput:
 		return kw
 	case kwBaseURL, "base-url", "base_url", "url":
 		return kwBaseURL
@@ -78,7 +81,7 @@ func Parse(data []byte) (Selection, error) {
 		fields := strings.Fields(text)
 		canon := canonicalKeyword(strings.ToLower(fields[0]))
 		if canon == "" {
-			return Selection{}, fmt.Errorf("line %d: unknown keyword %q (expected PROVIDER, FAMILY, MODEL, CONTEXT, or BASEURL)", line, fields[0])
+			return Selection{}, fmt.Errorf("line %d: unknown keyword %q (expected PROVIDER, FAMILY, MODEL, CONTEXT, OUTPUT, or BASEURL)", line, fields[0])
 		}
 		switch {
 		case len(fields) < 2:
@@ -102,6 +105,8 @@ func Parse(data []byte) (Selection, error) {
 			sel.Model = value
 		case kwContext:
 			sel.Context = value
+		case kwOutput:
+			sel.Output = value
 		case kwBaseURL:
 			sel.BaseURL = value
 		}
@@ -145,6 +150,7 @@ func Format(sel Selection) string {
 	line("FAMILY", sel.Family)
 	line("MODEL", sel.Model)
 	line("CONTEXT", sel.Context)
+	line("OUTPUT", sel.Output)
 	line("BASEURL", sel.BaseURL)
 	return b.String()
 }

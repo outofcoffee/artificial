@@ -68,27 +68,38 @@ func TestParse_Invalid(t *testing.T) {
 }
 
 func TestApply(t *testing.T) {
-	// A model with an existing limit must keep sibling limit keys.
+	// A model with an existing limit must keep sibling limit keys, while both
+	// context and output are (re)set.
 	models := map[string]any{
 		"a": map[string]any{"name": "A"},
-		"b": map[string]any{"name": "B", "limit": map[string]any{"output": 8192}},
+		"b": map[string]any{"name": "B", "limit": map[string]any{"foo": "bar"}},
 		"c": "not-a-map", // hardened against unexpected shapes
 	}
-	Apply(models, 200000)
+	Apply(models, 200000, 50000)
 
-	a := models["a"].(map[string]any)["limit"].(map[string]any)
-	if a["context"] != 200000 {
-		t.Errorf("model a context = %v, want 200000", a["context"])
+	for _, key := range []string{"a", "b", "c"} {
+		limit := models[key].(map[string]any)["limit"].(map[string]any)
+		if limit["context"] != 200000 {
+			t.Errorf("model %q context = %v, want 200000", key, limit["context"])
+		}
+		if limit["output"] != 50000 {
+			t.Errorf("model %q output = %v, want 50000", key, limit["output"])
+		}
 	}
-	b := models["b"].(map[string]any)["limit"].(map[string]any)
-	if b["context"] != 200000 {
-		t.Errorf("model b context = %v, want 200000", b["context"])
+	if got := models["b"].(map[string]any)["limit"].(map[string]any)["foo"]; got != "bar" {
+		t.Errorf("model b sibling limit key not preserved: %v", got)
 	}
-	if b["output"] != 8192 {
-		t.Errorf("model b output limit not preserved: %v", b["output"])
+}
+
+func TestDefaultOutput(t *testing.T) {
+	cases := map[int]int{
+		200000: 50000, // a quarter of the context
+		128000: 32000,
+		3:      1, // never below one token
 	}
-	c := models["c"].(map[string]any)["limit"].(map[string]any)
-	if c["context"] != 200000 {
-		t.Errorf("non-map model c was not normalised: %v", c)
+	for ctx, want := range cases {
+		if got := DefaultOutput(ctx); got != want {
+			t.Errorf("DefaultOutput(%d) = %d, want %d", ctx, got, want)
+		}
 	}
 }

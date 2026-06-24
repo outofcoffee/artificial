@@ -19,14 +19,15 @@ func mustWrite(t *testing.T, path, content string) {
 	}
 }
 
-// TestCmdApply_ContextAndBaseURL checks that CONTEXT and BASEURL in an Outfit
-// land as limit.context on the model and options.baseURL on the provider.
-func TestCmdApply_ContextAndBaseURL(t *testing.T) {
+// TestCmdApply_ContextOutputAndBaseURL checks that CONTEXT, OUTPUT, and BASEURL
+// in an Outfit land as limit.context/limit.output on the model and
+// options.baseURL on the provider.
+func TestCmdApply_ContextOutputAndBaseURL(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
 
 	outfitFile := filepath.Join(dir, "Outfit")
-	mustWrite(t, outfitFile, "PROVIDER llamacpp\nMODEL gemma\nCONTEXT 128k\nBASEURL http://127.0.0.1:9090/v1\n")
+	mustWrite(t, outfitFile, "PROVIDER llamacpp\nMODEL gemma\nCONTEXT 128k\nOUTPUT 32k\nBASEURL http://127.0.0.1:9090/v1\n")
 	captureStdout(t, func() {
 		if err := cmdApply([]string{outfitFile}); err != nil {
 			t.Fatalf("cmdApply: %v", err)
@@ -42,16 +43,41 @@ func TestCmdApply_ContextAndBaseURL(t *testing.T) {
 	if got := model["limit"].(map[string]any)["context"]; got != float64(128000) {
 		t.Errorf("limit.context = %v, want 128000", got)
 	}
+	if got := model["limit"].(map[string]any)["output"]; got != float64(32000) {
+		t.Errorf("limit.output = %v, want 32000", got)
+	}
 }
 
-// TestCmdExport_ContextAndBaseURL checks the export side of the round-trip: a
-// non-default base URL and a context window are both recovered.
-func TestCmdExport_ContextAndBaseURL(t *testing.T) {
+// TestCmdApply_OutputFlagOverride checks that a command-line --output overrides
+// the Outfit's OUTPUT instruction.
+func TestCmdApply_OutputFlagOverride(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
 
 	outfitFile := filepath.Join(dir, "Outfit")
-	mustWrite(t, outfitFile, "PROVIDER llamacpp\nMODEL gemma\nCONTEXT 200000\nBASEURL http://127.0.0.1:9090/v1\n")
+	mustWrite(t, outfitFile, "PROVIDER llamacpp\nMODEL gemma\nCONTEXT 128k\nOUTPUT 32k\n")
+	captureStdout(t, func() {
+		if err := cmdApply([]string{"-o", "64k", outfitFile}); err != nil {
+			t.Fatalf("cmdApply: %v", err)
+		}
+	})
+
+	m := readConfigMap(t, filepath.Join(dir, "opencode", "opencode.json"))
+	model := m["provider"].(map[string]any)["llamacpp"].(map[string]any)["models"].(map[string]any)["gemma"].(map[string]any)
+	if got := model["limit"].(map[string]any)["output"]; got != float64(64000) {
+		t.Errorf("limit.output = %v, want 64000 (flag should override OUTPUT 32k)", got)
+	}
+}
+
+// TestCmdExport_ContextOutputAndBaseURL checks the export side of the
+// round-trip: a non-default base URL, a context window, and an output limit are
+// all recovered.
+func TestCmdExport_ContextOutputAndBaseURL(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+
+	outfitFile := filepath.Join(dir, "Outfit")
+	mustWrite(t, outfitFile, "PROVIDER llamacpp\nMODEL gemma\nCONTEXT 200000\nOUTPUT 50000\nBASEURL http://127.0.0.1:9090/v1\n")
 	captureStdout(t, func() {
 		if err := cmdApply([]string{outfitFile}); err != nil {
 			t.Fatalf("cmdApply: %v", err)
@@ -63,7 +89,7 @@ func TestCmdExport_ContextAndBaseURL(t *testing.T) {
 			t.Fatalf("cmdExport: %v", err)
 		}
 	})
-	for _, want := range []string{"PROVIDER llamacpp", "MODEL    gemma", "CONTEXT  200000", "BASEURL  http://127.0.0.1:9090/v1"} {
+	for _, want := range []string{"PROVIDER llamacpp", "MODEL    gemma", "CONTEXT  200000", "OUTPUT   50000", "BASEURL  http://127.0.0.1:9090/v1"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("export missing %q:\n%s", want, out)
 		}
