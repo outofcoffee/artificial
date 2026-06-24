@@ -141,6 +141,22 @@ func TestParseSelection(t *testing.T) {
 	if s.Context != "200000" {
 		t.Errorf("-c parsed wrong: %+v", s)
 	}
+
+	// Output flag, long and short.
+	s, err = parseSelection("add", []string{"-p", "ollama", "--output", "32k"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Output != "32k" {
+		t.Errorf("--output parsed wrong: %+v", s)
+	}
+	s, err = parseSelection("add", []string{"-p", "ollama", "-o", "16000"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Output != "16000" {
+		t.Errorf("-o parsed wrong: %+v", s)
+	}
 }
 
 func TestCmdAdd_ContextSize(t *testing.T) {
@@ -156,6 +172,10 @@ func TestCmdAdd_ContextSize(t *testing.T) {
 	if !strings.Contains(out, "Context window: 128000 tokens") {
 		t.Errorf("missing context summary in output:\n%s", out)
 	}
+	// With no --output given, output defaults to a quarter of the context.
+	if !strings.Contains(out, "Max output: 32000 tokens") {
+		t.Errorf("missing default output summary in output:\n%s", out)
+	}
 
 	path := filepath.Join(dir, "opencode", "opencode.json")
 	models := readConfigMap(t, path)["provider"].(map[string]any)["openrouter"].(map[string]any)["models"].(map[string]any)
@@ -168,6 +188,50 @@ func TestCmdAdd_ContextSize(t *testing.T) {
 		if limit["context"] != float64(128000) {
 			t.Errorf("model %q context = %v, want 128000", key, limit["context"])
 		}
+		// opencode requires limit.output whenever limit.context is set.
+		if limit["output"] != float64(32000) {
+			t.Errorf("model %q output = %v, want 32000", key, limit["output"])
+		}
+	}
+}
+
+// TestCmdAdd_OutputSize covers an explicit --output: it is written verbatim and
+// is not derived from the context.
+func TestCmdAdd_OutputSize(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("DEEPSEEK_API_KEY", "sk-or-v1-test")
+
+	out := captureStdout(t, func() {
+		if err := cmdAdd([]string{"-p", "openrouter", "-f", "deepseek-v4", "-c", "128k", "-o", "64k"}); err != nil {
+			t.Fatalf("cmdAdd: %v", err)
+		}
+	})
+	if !strings.Contains(out, "Max output: 64000 tokens") {
+		t.Errorf("missing explicit output summary:\n%s", out)
+	}
+
+	path := filepath.Join(dir, "opencode", "opencode.json")
+	models := readConfigMap(t, path)["provider"].(map[string]any)["openrouter"].(map[string]any)["models"].(map[string]any)
+	for key, m := range models {
+		limit := m.(map[string]any)["limit"].(map[string]any)
+		if limit["output"] != float64(64000) {
+			t.Errorf("model %q output = %v, want 64000", key, limit["output"])
+		}
+	}
+}
+
+// TestCmdAdd_OutputErrors covers the two ways an output limit is rejected:
+// without a context to sit under, and when it exceeds that context.
+func TestCmdAdd_OutputErrors(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("DEEPSEEK_API_KEY", "sk-or-v1-test")
+
+	if err := cmdAdd([]string{"-p", "openrouter", "-f", "deepseek-v4", "-o", "32k"}); err == nil {
+		t.Error("expected error for --output without --context")
+	}
+	if err := cmdAdd([]string{"-p", "openrouter", "-f", "deepseek-v4", "-c", "8k", "-o", "32k"}); err == nil {
+		t.Error("expected error for an output limit exceeding the context")
 	}
 }
 

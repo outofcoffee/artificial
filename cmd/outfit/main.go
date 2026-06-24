@@ -16,7 +16,7 @@
 //	outfit init-providers [path] # write the embedded providers.yaml out
 //
 // Short flags: -p (provider), -f (model-family), -m (model), -c (context),
-// -u (base-url).
+// -o (output), -u (base-url).
 //
 // The API base URL can be overridden for any provider with --base-url/-u or the
 // OUTFIT_BASE_URL environment variable; the flag wins over the env var, and
@@ -88,9 +88,9 @@ func usage() {
 
 Usage:
   outfit list
-  outfit add    --provider <name> [--model-family <family>] [--model <id>] [--context <size>]
+  outfit add    --provider <name> [--model-family <family>] [--model <id>] [--context <size>] [--output <size>]
   outfit remove --provider <name> [--model-family <family>] [--model <id>]
-  outfit apply  [path]              (defaults to ./Outfit)
+  outfit apply  [path] [--output <size>]   (defaults to ./Outfit)
   outfit export [--provider <name>]
   outfit init-providers [path]      (defaults to ./providers.yaml)
   outfit version                    (or -v/--version)
@@ -101,6 +101,8 @@ Flags:
   -m, --model          model id to set as default / to add or remove
   -c, --context        context window size for the added model(s); accepts
                        human suffixes (128k, 1m) or an absolute count (200000)
+  -o, --output         max output tokens for the added model(s); same format as
+                       --context. Defaults to a quarter of --context when unset
   -u, --base-url       override the provider API base URL
                        (or set OUTFIT_BASE_URL)
       --providers      path to a providers.yaml override
@@ -108,7 +110,8 @@ Flags:
 
 add: deep-merges the provider into the opencode config, preserving everything
      else. Specify a family and/or an explicit model. --context sets the
-     model's limit.context window.
+     model's limit.context window; --output sets limit.output (opencode
+     requires it alongside a context, defaulting to a quarter of the context).
 remove: removes the provider, or just the named models when a family/model is
         given. Clears the default model if it pointed at something removed.
 apply: applies an Outfit file — a declarative, Dockerfile-style description of
@@ -132,6 +135,8 @@ func parseSelection(name string, args []string) (outfit.Selection, error) {
 	fs.StringVar(&s.Model, "m", "", "model id (shorthand)")
 	fs.StringVar(&s.Context, "context", "", "context window size (e.g. 128k, 1m, 200000)")
 	fs.StringVar(&s.Context, "c", "", "context window size (shorthand)")
+	fs.StringVar(&s.Output, "output", "", "max output tokens (defaults to a quarter of --context)")
+	fs.StringVar(&s.Output, "o", "", "max output tokens (shorthand)")
 	fs.StringVar(&s.Providers, "providers", "", "path to a providers.yaml override")
 	fs.StringVar(&s.BaseURL, "base-url", "", "override the provider API base URL")
 	fs.StringVar(&s.BaseURL, "u", "", "API base URL override (shorthand)")
@@ -174,17 +179,31 @@ func applySelection(sel outfit.Selection) error {
 		return err
 	}
 
-	var contextSize int
+	var contextSize, outputSize int
+	if sel.Output != "" && sel.Context == "" {
+		return fmt.Errorf("--output/-o needs --context/-c: opencode requires a context window before an output limit")
+	}
 	if sel.Context != "" {
 		contextSize, err = contextsize.Parse(sel.Context)
 		if err != nil {
 			return err
 		}
+		if sel.Output != "" {
+			outputSize, err = contextsize.Parse(sel.Output)
+			if err != nil {
+				return err
+			}
+			if outputSize > contextSize {
+				return fmt.Errorf("output limit (%d) cannot exceed the context window (%d)", outputSize, contextSize)
+			}
+		} else {
+			outputSize = contextsize.DefaultOutput(contextSize)
+		}
 		models, _ := block["models"].(map[string]any)
 		if len(models) == 0 {
 			return fmt.Errorf("--context/-c needs a model: specify --model-family/-f and/or --model/-m")
 		}
-		contextsize.Apply(models, contextSize)
+		contextsize.Apply(models, contextSize, outputSize)
 	}
 
 	configFile, err := opencode.ResolveConfigFile()
@@ -206,6 +225,7 @@ func applySelection(sel outfit.Selection) error {
 	}
 	if contextSize > 0 {
 		fmt.Printf("Context window: %d tokens\n", contextSize)
+		fmt.Printf("Max output: %d tokens\n", outputSize)
 	}
 	if opts, ok := block["options"].(map[string]any); ok {
 		if _, ok := opts["apiKey"]; ok {
@@ -224,8 +244,10 @@ func applySelection(sel outfit.Selection) error {
 // holds one.
 func cmdApply(args []string) error {
 	fs := flag.NewFlagSet("apply", flag.ContinueOnError)
-	var providers string
+	var providers, output string
 	fs.StringVar(&providers, "providers", "", "path to a providers.yaml override")
+	fs.StringVar(&output, "output", "", "max output tokens (overrides the Outfit's OUTPUT)")
+	fs.StringVar(&output, "o", "", "max output tokens (shorthand)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -247,6 +269,10 @@ func cmdApply(args []string) error {
 		return fmt.Errorf("%s: %w", path, err)
 	}
 	sel.Providers = providers
+	// A command-line --output/-o overrides the Outfit's OUTPUT instruction.
+	if output != "" {
+		sel.Output = output
+	}
 	return applySelection(sel)
 }
 
@@ -327,18 +353,21 @@ func cmdExport(args []string) error {
 		sel.Model = st.ModelKeys[0]
 	}
 
-	// Reconstruct the context window when the exported models agree on one.
-	sel.Context = exportContext(sel, st)
+	// Reconstruct the context and output limits when the exported models agree
+	// on a single value for each.
+	sel.Context = exportLimit(sel, st, st.Contexts)
+	sel.Output = exportLimit(sel, st, st.Outputs)
 
 	fmt.Print(outfit.Format(sel))
 	return nil
 }
 
-// exportContext returns the context window to record for an export, as a token
-// count string, when the models the Outfit selects all share a single value.
-// It returns "" when no context was set or the models disagree (e.g. a config
-// hand-edited to differ), so export never invents or guesses a value.
-func exportContext(sel outfit.Selection, st opencode.ProviderState) string {
+// exportLimit returns a per-model limit (limit.context or limit.output,
+// depending on the values map passed) to record for an export, as a token count
+// string, when the models the Outfit selects all share a single value. It
+// returns "" when none was set or the models disagree (e.g. a config hand-edited
+// to differ), so export never invents or guesses a value.
+func exportLimit(sel outfit.Selection, st opencode.ProviderState, values map[string]int) string {
 	var keys []string
 	switch {
 	case sel.Family != "":
@@ -348,7 +377,7 @@ func exportContext(sel outfit.Selection, st opencode.ProviderState) string {
 	}
 	distinct := map[int]bool{}
 	for _, k := range keys {
-		if c, ok := st.Contexts[k]; ok {
+		if c, ok := values[k]; ok {
 			distinct[c] = true
 		}
 	}

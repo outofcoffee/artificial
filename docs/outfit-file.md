@@ -11,6 +11,7 @@ PROVIDER openrouter
 FAMILY   deepseek-v4
 MODEL    deepseek/deepseek-v4-pro   # optional; becomes the default model
 CONTEXT  128k                       # optional; context window
+OUTPUT   32k                        # optional; max output tokens
 BASEURL  https://gateway/v1         # optional; API base URL override
 ```
 
@@ -39,6 +40,7 @@ One instruction per line: a keyword followed by a single value.
 | `FAMILY`   | one of `FAMILY` / `MODEL`  | `--model-family` | `FAMILY deepseek-v4`         |
 | `MODEL`    | one of `FAMILY` / `MODEL`  | `--model`      | `MODEL deepseek/deepseek-v4-pro` |
 | `CONTEXT`  | no                         | `--context`    | `CONTEXT 128k`                 |
+| `OUTPUT`   | no                         | `--output`     | `OUTPUT 32k`                   |
 | `BASEURL`  | no                         | `--base-url`   | `BASEURL https://gateway/v1`   |
 
 Rules:
@@ -50,6 +52,10 @@ Rules:
   both to add the family but make `MODEL` the default.
 - `CONTEXT` sets the context window for the model(s). It accepts human suffixes
   (`128k`, `1m`) or an absolute count (`200000`).
+- `OUTPUT` caps the max output tokens, in the same format as `CONTEXT`. opencode
+  requires one whenever a context is set, so if you omit it `outfit` records a
+  quarter of the context. It cannot exceed the context window. A command-line
+  `--output`/`-o` on `outfit apply` overrides whatever the Outfit specifies.
 - `BASEURL` overrides the provider's API base URL — handy for a gateway or a
   llama.cpp server on a non-default port. `URL`, `BASE-URL`, and `BASE_URL` are
   accepted as aliases.

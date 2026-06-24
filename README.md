@@ -58,14 +58,14 @@ Then just run `opencode`.
 
 ```sh
 outfit list
-outfit add    --provider <name> [--model-family <family>] [--model <id>] [--context <size>] [--base-url <url>]
+outfit add    --provider <name> [--model-family <family>] [--model <id>] [--context <size>] [--output <size>] [--base-url <url>]
 outfit remove --provider <name> [--model-family <family>] [--model <id>]
-outfit apply  [path]                 # apply an Outfit file (default ./Outfit)
-outfit export [--provider <name>]    # print the current config as an Outfit
-outfit init-providers [path]         # write the built-in catalogue out to edit
+outfit apply  [path] [--output <size>]   # apply an Outfit file (default ./Outfit)
+outfit export [--provider <name>]        # print the current config as an Outfit
+outfit init-providers [path]             # write the built-in catalogue out to edit
 ```
 
-Short flags: `-p` (provider), `-f` (model-family), `-m` (model), `-c` (context), `-u` (base-url).
+Short flags: `-p` (provider), `-f` (model-family), `-m` (model), `-c` (context), `-o` (output), `-u` (base-url).
 
 ### Examples
 
@@ -87,6 +87,9 @@ outfit add -p openrouter -f deepseek-v4 -m deepseek/deepseek-v4-pro
 outfit add -p llamacpp -m my-model -c 128k
 outfit add -p llamacpp -m my-model --context 200000
 
+# Cap the max output tokens too (defaults to a quarter of the context)
+outfit add -p llamacpp -m my-model -c 128k -o 32k
+
 # Take a provider back out
 outfit remove -p ollama
 
@@ -101,6 +104,10 @@ if it pointed at something you removed.
 forgiving: `128k`, `1m`, `1.5m`, `200000`, `128,000`, even `128 K tokens` all
 land where you'd expect (`k`/`m`/`g` are decimal — `128k` is 128,000 tokens).
 
+`--output`/`-o` caps the max output tokens, in the same format. opencode needs
+one whenever a context is set, so when you leave it off `outfit` fills in a
+quarter of the context for you. It can't exceed the context window.
+
 ## Outfit files
 
 Prefer to keep a provider selection in a file — like a `Dockerfile`, but for
@@ -112,6 +119,7 @@ PROVIDER openrouter
 FAMILY   deepseek-v4
 MODEL    deepseek/deepseek-v4-pro   # optional; becomes the default
 CONTEXT  128k                       # optional; context window
+OUTPUT   32k                        # optional; max output tokens
 BASEURL  https://gateway/v1         # optional; API base URL override
 ```
 

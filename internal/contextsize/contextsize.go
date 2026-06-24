@@ -54,10 +54,23 @@ func Parse(s string) (int, error) {
 	return int(tokens), nil
 }
 
-// Apply sets limit.context on every model in models, merging into any existing
-// limit map rather than replacing it. The model values are the map[string]any
-// entries produced by catalog.BuildProviderBlock.
-func Apply(models map[string]any, ctx int) {
+// DefaultOutput returns the output-token limit to use when the caller sets a
+// context window but does not specify an output limit. opencode requires
+// limit.output whenever limit.context is set; output tokens are drawn from the
+// same window, so this defaults to a quarter of the context (never below one).
+func DefaultOutput(ctx int) int {
+	out := ctx / 4
+	if out < 1 {
+		out = 1
+	}
+	return out
+}
+
+// Apply sets limit.context and limit.output on every model in models, merging
+// into any existing limit map rather than replacing it. opencode's schema
+// requires output whenever context is present. The model values are the
+// map[string]any entries produced by catalog.BuildProviderBlock.
+func Apply(models map[string]any, ctx, output int) {
 	for k, v := range models {
 		m, ok := v.(map[string]any)
 		if !ok {
@@ -68,6 +81,7 @@ func Apply(models map[string]any, ctx int) {
 			limit = map[string]any{}
 		}
 		limit["context"] = ctx
+		limit["output"] = output
 		m["limit"] = limit
 		models[k] = m
 	}

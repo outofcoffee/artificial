@@ -37,9 +37,9 @@ func TestParse(t *testing.T) {
 			want: Selection{Provider: "ollama", Family: "llama"},
 		},
 		{
-			name: "context and base url",
-			in:   "PROVIDER llamacpp\nMODEL gemma\nCONTEXT 128k\nBASEURL http://localhost:9090/v1\n",
-			want: Selection{Provider: "llamacpp", Model: "gemma", Context: "128k", BaseURL: "http://localhost:9090/v1"},
+			name: "context, output, and base url",
+			in:   "PROVIDER llamacpp\nMODEL gemma\nCONTEXT 128k\nOUTPUT 32k\nBASEURL http://localhost:9090/v1\n",
+			want: Selection{Provider: "llamacpp", Model: "gemma", Context: "128k", Output: "32k", BaseURL: "http://localhost:9090/v1"},
 		},
 		{
 			name: "base url aliases",
@@ -53,7 +53,7 @@ func TestParse(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Parse: %v", err)
 			}
-			if got.Provider != tc.want.Provider || got.Family != tc.want.Family || got.Model != tc.want.Model {
+			if got != tc.want {
 				t.Errorf("got %+v, want %+v", got, tc.want)
 			}
 		})
@@ -84,6 +84,7 @@ func TestFormatRoundTrip(t *testing.T) {
 		Family:   "deepseek-v4",
 		Model:    "deepseek/deepseek-v4-pro",
 		Context:  "128000",
+		Output:   "32000",
 		BaseURL:  "https://gateway.example/v1",
 	}
 	out := Format(sel)
