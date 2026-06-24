@@ -13,6 +13,7 @@
 //	outfit remove --provider <name> [--model-family <family>] [--model <id>]
 //	outfit apply  [path]   # apply an Outfit file (defaults to ./Outfit)
 //	outfit export [-p name] # print the current config as an Outfit
+//	outfit init-providers [path] # write the embedded providers.yaml out
 //
 // Short flags: -p (provider), -f (model-family), -m (model), -c (context),
 // -b (base-url).
@@ -68,6 +69,8 @@ func run(args []string) error {
 		return cmdApply(rest)
 	case "export":
 		return cmdExport(rest)
+	case "init-providers":
+		return cmdInitProviders(rest)
 	case "version", "-v", "--version":
 		fmt.Println(version)
 		return nil
@@ -89,6 +92,7 @@ Usage:
   outfit remove --provider <name> [--model-family <family>] [--model <id>]
   outfit apply  [path]              (defaults to ./Outfit)
   outfit export [--provider <name>]
+  outfit init-providers [path]      (defaults to ./providers.yaml)
   outfit version                    (or -v/--version)
 
 Flags:
@@ -110,6 +114,10 @@ remove: removes the provider, or just the named models when a family/model is
 apply: applies an Outfit file — a declarative, Dockerfile-style description of
        one provider selection — as if you had run the equivalent add.
 export: prints the current config as an Outfit (outfit export > Outfit).
+init-providers: writes the binary's built-in providers.yaml to the working
+       directory (or [path]) so you can customise the catalogue and point
+       outfit at it with --providers/OUTFIT_PROVIDERS. Refuses to overwrite an
+       existing file unless --force is given.
 `)
 }
 
@@ -434,5 +442,47 @@ func cmdList(args []string) error {
 		}
 	}
 	fmt.Print(b.String())
+	return nil
+}
+
+// defaultProvidersFile is the filename cmdInitProviders writes to when no path
+// is given. It matches the name the embedded catalogue carries and the one
+// --providers/OUTFIT_PROVIDERS are typically pointed at.
+const defaultProvidersFile = "providers.yaml"
+
+// cmdInitProviders writes the binary's embedded providers.yaml to the working
+// directory (or an explicit path) as a starting point for a custom catalogue.
+// It refuses to clobber an existing file unless --force is given, so a stray
+// run can't destroy a catalogue the user has been editing.
+func cmdInitProviders(args []string) error {
+	fs := flag.NewFlagSet("init-providers", flag.ContinueOnError)
+	var force bool
+	fs.BoolVar(&force, "force", false, "overwrite an existing file")
+	fs.BoolVar(&force, "F", false, "overwrite an existing file (shorthand)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	path := defaultProvidersFile
+	if rest := fs.Args(); len(rest) > 0 {
+		path = rest[0]
+	}
+
+	if !force {
+		if _, err := os.Stat(path); err == nil {
+			return fmt.Errorf("%s already exists; pass a different path or use --force to overwrite", path)
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("checking %s: %w", path, err)
+		}
+	}
+
+	if err := os.WriteFile(path, catalog.EmbeddedYAML(), 0o644); err != nil {
+		return fmt.Errorf("writing %s: %w", path, err)
+	}
+
+	fmt.Printf("Wrote %s\n\n", path)
+	fmt.Printf("Edit it, then point outfit at it:\n")
+	fmt.Printf("  outfit list --providers %s\n", path)
+	fmt.Printf("  OUTFIT_PROVIDERS=%s outfit list\n", path)
 	return nil
 }

@@ -340,3 +340,22 @@ func TestBuildProviderBlock_NoBaseURLOverride(t *testing.T) {
 		t.Errorf("baseURL = %v, want the catalogue default", opts["baseURL"])
 	}
 }
+
+// TestEmbeddedYAML confirms the embedded catalogue is returned verbatim, parses
+// as a catalogue, and is a defensive copy callers cannot mutate in place.
+func TestEmbeddedYAML(t *testing.T) {
+	data := EmbeddedYAML()
+	if len(data) == 0 {
+		t.Fatal("EmbeddedYAML returned no data")
+	}
+	if _, err := LoadFrom(""); err != nil {
+		t.Fatalf("embedded catalogue should parse: %v", err)
+	}
+
+	// Mutating the returned slice must not affect a subsequent call.
+	data[0] ^= 0xff
+	again := EmbeddedYAML()
+	if again[0] == data[0] {
+		t.Error("EmbeddedYAML should return a fresh copy, not the underlying bytes")
+	}
+}

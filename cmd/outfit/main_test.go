@@ -355,3 +355,80 @@ func TestCmdList(t *testing.T) {
 		}
 	}
 }
+
+func TestCmdInitProviders_EndToEnd(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "providers.yaml")
+
+	out := captureStdout(t, func() {
+		if err := cmdInitProviders([]string{path}); err != nil {
+			t.Fatalf("cmdInitProviders: %v", err)
+		}
+	})
+	if !strings.Contains(out, "Wrote "+path) {
+		t.Errorf("missing confirmation in output:\n%s", out)
+	}
+
+	// The written file must be byte-for-byte the embedded catalogue.
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read written file: %v", err)
+	}
+	if !bytes.Equal(got, catalog.EmbeddedYAML()) {
+		t.Error("written providers.yaml does not match the embedded catalogue")
+	}
+
+	// And it must load as a catalogue via the --providers path.
+	if _, err := catalog.LoadFrom(path); err != nil {
+		t.Errorf("written catalogue does not parse: %v", err)
+	}
+}
+
+func TestCmdInitProviders_NoClobber(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "providers.yaml")
+	if err := os.WriteFile(path, []byte("# do not touch\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Without --force, an existing file is left untouched and the command errors.
+	if err := cmdInitProviders([]string{path}); err == nil {
+		t.Error("expected an error when the target file already exists")
+	}
+	got, _ := os.ReadFile(path)
+	if string(got) != "# do not touch\n" {
+		t.Errorf("existing file was clobbered: %q", got)
+	}
+
+	// With --force, it is overwritten with the embedded catalogue.
+	captureStdout(t, func() {
+		if err := cmdInitProviders([]string{"--force", path}); err != nil {
+			t.Fatalf("cmdInitProviders --force: %v", err)
+		}
+	})
+	got, _ = os.ReadFile(path)
+	if !bytes.Equal(got, catalog.EmbeddedYAML()) {
+		t.Error("--force did not overwrite with the embedded catalogue")
+	}
+}
+
+func TestCmdInitProviders_DefaultPath(t *testing.T) {
+	dir := t.TempDir()
+	old, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(old)
+
+	captureStdout(t, func() {
+		if err := cmdInitProviders(nil); err != nil {
+			t.Fatalf("cmdInitProviders: %v", err)
+		}
+	})
+	if _, err := os.Stat(filepath.Join(dir, "providers.yaml")); err != nil {
+		t.Errorf("default providers.yaml not written: %v", err)
+	}
+}

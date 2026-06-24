@@ -67,6 +67,15 @@ func Load() (*Catalog, error) {
 	return LoadFrom("")
 }
 
+// EmbeddedYAML returns a copy of the raw providers.yaml embedded into the
+// binary, so callers can write it out as a starting point for a custom
+// catalogue (see `outfit init-providers`).
+func EmbeddedYAML() []byte {
+	out := make([]byte, len(providersYAML))
+	copy(out, providersYAML)
+	return out
+}
+
 // LoadFrom parses the catalogue from path, falling back to the embedded
 // catalogue when path is empty.
 func LoadFrom(path string) (*Catalog, error) {
