@@ -65,7 +65,7 @@ outfit export [--provider <name>]    # print the current config as an Outfit
 outfit init-providers [path]         # write the built-in catalogue out to edit
 ```
 
-Short flags: `-p` (provider), `-f` (model-family), `-m` (model), `-c` (context), `-b` (base-url).
+Short flags: `-p` (provider), `-f` (model-family), `-m` (model), `-c` (context), `-u` (base-url).
 
 ### Examples
 
@@ -133,7 +133,7 @@ your shell environment. Local providers like Ollama and llama.cpp need no key;
 Bedrock authenticates through your AWS credentials.
 
 Base URLs default to the usual local ports. Override the endpoint for **any**
-provider with `--base-url`/`-b` or the `OUTFIT_BASE_URL` env var — handy for
+provider with `--base-url`/`-u` or the `OUTFIT_BASE_URL` env var — handy for
 proxies, gateways, or a server on a non-default host:
 
 ```sh

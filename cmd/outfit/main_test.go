@@ -118,12 +118,12 @@ func TestParseSelection(t *testing.T) {
 	if s.BaseURL != "https://long.example/v1" {
 		t.Errorf("--base-url parsed wrong: %q", s.BaseURL)
 	}
-	s, err = parseSelection("add", []string{"-p", "ollama", "-b", "https://short.example/v1"})
+	s, err = parseSelection("add", []string{"-p", "ollama", "-u", "https://short.example/v1"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if s.BaseURL != "https://short.example/v1" {
-		t.Errorf("-b parsed wrong: %q", s.BaseURL)
+		t.Errorf("-u parsed wrong: %q", s.BaseURL)
 	}
 
 	// Context flag, long and short.
@@ -209,7 +209,7 @@ func TestCmdAdd_BaseURLOverride(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "sk-test")
 
 	out := captureStdout(t, func() {
-		if err := cmdAdd([]string{"-p", "openai-compatible", "-f", "gpt", "-b", "https://proxy.example/v1"}); err != nil {
+		if err := cmdAdd([]string{"-p", "openai-compatible", "-f", "gpt", "-u", "https://proxy.example/v1"}); err != nil {
 			t.Fatalf("cmdAdd: %v", err)
 		}
 	})
