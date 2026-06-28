@@ -2,25 +2,44 @@
   <img src="assets/logo.png" alt="outfit" width="520">
 </p>
 
-Point your coding agent — [opencode](https://opencode.ai) or
-[Pi](https://github.com/earendil-works/pi) — at the model providers you actually
-use: OpenRouter, AWS Bedrock, Ollama, llama.cpp, or any OpenAI-compatible
-endpoint, with a single command. No hand-editing JSON, no clobbering the config
-you already have.
+<p align="center">
+  Point your coding agent at any model — local or hosted — with one command.
+</p>
 
-## What it does
+<p align="center">
+  <em>// no hand-editing JSON, no model ids to memorise, no clobbering the config you already have.</em>
+</p>
 
-- Merges provider settings into your coding agent's **global** config —
-  opencode's `~/.config/opencode`, or Pi's `~/.pi/agent/models.json` — keeping
-  everything else (other providers, your theme, even your comments) exactly
-  where you left it.
-- One catalogue, two agents: pick the **harness** per command with `--harness`,
-  the `OUTFIT_HARNESS` env var, or a stored default. opencode is the default.
-- Reads provider definitions from a built-in catalogue, so there are no URLs or
-  model ids to memorise.
-- Pulls API keys from a local `.env` (or your environment): opencode gets the
-  resolved key written `0600`; Pi gets a `$ENV_VAR` reference, so no secret
-  lands on disk.
+---
+
+Your coding agent is only as good as the model behind it, and the model you want
+changes by the day — a frontier model on OpenRouter for the hard stuff, a local
+Qwen on llama.cpp when you're offline or cost-conscious, Claude on Bedrock for
+work. Switching between them should take a second. It usually doesn't.
+
+Every agent keeps its config somewhere different, in a shape of its own. Pointing
+one at a new provider means opening that file by hand and getting four things
+exactly right: the base URL, the model id, the package it loads, and the name of
+the environment variable holding your key. One stray brace and the agent won't
+start. **Local models are the worst of it** — each runtime has its own ports,
+model refs and quirks, and none of it is written down where you need it.
+
+`outfit` is the wardrobe for your coding agent. Tell it the provider you want and
+it dresses the agent for you:
+
+- **One command, any model.** Pick from a built-in catalogue — OpenRouter,
+  Bedrock, Ollama, llama.cpp, or any OpenAI-compatible endpoint. No URLs or model
+  ids to look up.
+- **Your config survives.** Settings are merged *into* what you already have.
+  Other providers, your theme, even your comments stay exactly where you left them.
+- **Keys stay where they belong.** Secrets are read from a local `.env` and never
+  hard-coded somewhere they'll leak — written `0600`, or kept as an env reference.
+- **Local models, sorted.** The same file that points your agent at a local model
+  can launch the server for it. One source of truth, two jobs.
+
+Works with [opencode](https://opencode.ai) and
+[Pi](https://github.com/earendil-works/pi) today — pick the one you use per
+command, or set a default. The same selection works for either.
 
 ## Install
 
@@ -42,7 +61,7 @@ Drop the resulting `outfit` binary anywhere on your `PATH`.
 
 ## Quickstart
 
-See what's on the menu:
+See what's in the catalogue:
 
 ```sh
 outfit list
@@ -57,26 +76,10 @@ echo 'DEEPSEEK_API_KEY=sk-or-v1-...' > .env
 outfit add --provider openrouter --model-family deepseek-v4
 ```
 
-Then just run `opencode`.
+Then just run `opencode`. That's it — your agent is pointed at the new model, and
+the rest of your config is untouched.
 
-## Usage
-
-```sh
-outfit list
-outfit show   [--harness <name>]         # show what the harness has configured
-outfit add    --provider <name> [--model-family <family>] [--model <id>] [--alias <name>] [--context <size>] [--output <size>] [--base-url <url>]
-outfit remove --provider <name> [--model-family <family>] [--model <id>]
-outfit apply  [path] [--output <size>]   # apply an Outfit file (default ./Outfit)
-outfit unapply [path]                    # remove what an Outfit file selects
-outfit serve  [path] [--dry-run]         # run llama-server from the Outfit's PRESET
-outfit export [--provider <name>]        # print the current config as an Outfit
-outfit init-providers [path]             # write the built-in catalogue out to edit
-outfit harness [-H <name>] [args...]     # launch the harness (--get shows it; --set stores the default)
-```
-
-Short flags: `-p` (provider), `-f` (model-family), `-m` (model), `-a` (alias), `-c` (context), `-o` (output), `-u` (base-url), `-H` (harness).
-
-### Examples
+### More examples
 
 ```sh
 # A local Ollama model (no key required)
@@ -117,6 +120,23 @@ land where you'd expect (`k`/`m`/`g` are decimal — `128k` is 128,000 tokens).
 `--output`/`-o` caps the max output tokens, in the same format. opencode needs
 one whenever a context is set, so when you leave it off `outfit` fills in a
 quarter of the context for you. It can't exceed the context window.
+
+## Usage
+
+```sh
+outfit list
+outfit show   [--harness <name>]         # show what the harness has configured
+outfit add    --provider <name> [--model-family <family>] [--model <id>] [--alias <name>] [--context <size>] [--output <size>] [--base-url <url>]
+outfit remove --provider <name> [--model-family <family>] [--model <id>]
+outfit apply  [path] [--output <size>]   # apply an Outfit file (default ./Outfit)
+outfit unapply [path]                    # remove what an Outfit file selects
+outfit serve  [path] [--dry-run]         # run llama-server from the Outfit's PRESET
+outfit export [--provider <name>]        # print the current config as an Outfit
+outfit init-providers [path]             # write the built-in catalogue out to edit
+outfit harness [-H <name>] [args...]     # launch the harness (--get shows it; --set stores the default)
+```
+
+Short flags: `-p` (provider), `-f` (model-family), `-m` (model), `-a` (alias), `-c` (context), `-o` (output), `-u` (base-url), `-H` (harness).
 
 ## Harnesses
 
@@ -252,4 +272,35 @@ outfit init-providers                 # writes ./providers.yaml
 outfit list --providers providers.yaml
 ```
 
+## Development
+
+`outfit` is a Go CLI with no runtime dependencies. The domain logic is split
+into `internal/` packages so each concern is isolated and independently testable;
+[`AGENTS.md`](AGENTS.md) is the map of how it all fits together.
+
+```sh
+go build -o outfit ./cmd/outfit   # build the binary
+go test ./...                     # run the suite
+go test ./... -cover              # with coverage (kept >= 80%)
+go vet ./...                      # vet
+gofmt -w ./...                    # format
+```
+
+## Contributing
+
+Issues and pull requests are welcome. A few things that make a change easy to
+merge:
+
+- Adding a provider or model? It's a data change in
+  `internal/catalog/providers.yaml`, not Go — see
+  [Adding providers and models](#adding-providers-and-models).
+- Adding a third harness? Start at the `Harness` interface in
+  `internal/harness`; [`AGENTS.md`](AGENTS.md) walks through the contract.
+- Keep the suite green and formatted (`go test ./...`, `gofmt -w ./...`) before
+  opening a PR.
+
 The `.env` file and the built binary are git-ignored.
+
+## License
+
+[MIT](LICENSE).
