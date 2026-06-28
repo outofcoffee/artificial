@@ -12,6 +12,22 @@
 
 ---
 
+```sh
+# point your coding agent at a model — pick one from the catalogue
+outfit add -p ollama -f llama
+
+# prefer a file you can commit? drop an ./Outfit and apply it
+outfit apply
+
+# running that model locally too? the same file launches the server
+outfit serve
+```
+
+That's the whole tool. Your agent is dressed and pointed at the model; the rest
+of your config never moved.
+
+---
+
 Your coding agent is only as good as the model behind it, and the model you want
 changes by the day — a frontier model on OpenRouter for the hard stuff, a local
 Qwen on llama.cpp when you're offline or cost-conscious, Claude on Bedrock for
